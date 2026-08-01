@@ -62,7 +62,8 @@ function cleanRows(rows: DataRow[]): DataRow[] {
       for (const [key, value] of Object.entries(row)) {
         const cleanKey = key.trim();
         if (!cleanKey) continue;
-        if (typeof value === "string") {
+        
+       if (typeof value === "string") {
           const trimmed = value.trim();
           out[cleanKey] = trimmed === "" ? null : trimmed;
         } else if ((value as any) instanceof Date) {
