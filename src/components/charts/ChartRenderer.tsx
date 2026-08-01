@@ -9,11 +9,7 @@ interface ChartRendererProps {
   rows: DataRow[];
   /** Drill-down: called when the user clicks a category/bar/point. */
   onDrillDown?: (field: string, value: string) => void;
-  /** Exposes the underlying chart component instance for PNG export.
-   * Typed loosely (any) because echarts-for-react's own ref type
-   * (EChartsReact, the component instance) doesn't line up with the
-   * underlying echarts EChartsType — we only use it for exportUtils'
-   * getEchartsInstance()/getDataURL() calls, not for its TS shape. */
+  /** Exposes the underlying chart component instance for PNG export. */
   chartRef?: React.MutableRefObject<any>;
 }
 
