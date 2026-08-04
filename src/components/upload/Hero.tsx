@@ -11,6 +11,7 @@ const FEATURES = [
     icon: LayoutGrid,
     title: "Drag & drop dashboards",
     text: "Move, resize, add, or remove KPI cards, charts, and tables to build the exact view you need.",
+    
   },
   {
     icon: DownloadCloud,
