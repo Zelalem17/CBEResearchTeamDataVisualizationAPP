@@ -37,7 +37,7 @@ export default function Hero() {
           <Sparkles size={12} /> Instant Data Dashboards
         </span>
         <h1 className="relative text-2xl sm:text-4xl font-extrabold text-white leading-tight mb-3">
-          Turn financial data into decision-ready insights,<br className="hidden sm:block" /> in seconds.
+         Turn spreadsheets into insight, <br className="hidden sm:block" /> in seconds.
         </h1>
         <p className="relative text-brand-100 max-w-xl mx-auto text-sm sm:text-base">
          Upload bank reports, macroeconomic datasets, or branch metrics (CSV/Excel) to instantly generate interactive KPI cards, trend lines, and portfolio distributions. No server uploads, zero data leakage, and zero setup required.
