@@ -64,7 +64,7 @@ export default function FileUpload({ onImported }: FileUploadProps) {
     setLoading(true);
     try {
       const { rows } = await parseExcelSheet(pendingFile, sheetName);
-      buildDataset(`${pendingFile.name.replace(/\.[^/.]+$/, "")} — ${sheetName}`, rows);
+      buildDataset(`${pendingFile.name.replace(/\.[^/.]+$/, "")}   ${sheetName}`, rows);
     } finally {
       setLoading(false);
     }
@@ -99,8 +99,8 @@ export default function FileUpload({ onImported }: FileUploadProps) {
             </div>
             <div>
               <p className="font-semibold text-gray-900 dark:text-white">Drop a CSV or Excel file here</p>
-              <p className="text-sm text-gray-400">or click to browse — .csv, .xlsx, .xls</p>
-              <p className="text-xs text-gray-400 mt-1">Everything runs in your browser — nothing is uploaded anywhere.</p>
+              <p className="text-sm text-gray-400">or click to browse .csv, .xlsx, .xls</p>
+              <p className="text-xs text-gray-400 mt-1">Everything runs in your browser nothing is uploaded anywhere.</p>
             </div>
             <label className="btn-gold cursor-pointer">
               Browse files
@@ -120,7 +120,7 @@ export default function FileUpload({ onImported }: FileUploadProps) {
       {sheetNames.length > 1 && (
         <div className="card p-3 flex items-center gap-3 text-sm">
           <FileSpreadsheet size={16} className="text-brand-500 shrink-0" />
-          <span className="text-gray-500">This workbook has multiple sheets — imported the first one. Add another:</span>
+          <span className="text-gray-500">This workbook has multiple sheets   imported the first one. Add another:</span>
           <div className="flex flex-wrap gap-1.5">
             {sheetNames.map((s) => (
               <button key={s} onClick={() => handlePickSheet(s)} className="btn-secondary !py-1 !px-2 text-xs">
