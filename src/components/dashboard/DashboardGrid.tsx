@@ -2,12 +2,12 @@ import { useCallback, useRef, useState } from "react";
 import GridLayout, { Layout, WidthProvider } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
-import { Plus, Download, FileSpreadsheet, FileImage } from "lucide-react";
+import { Plus, FileSpreadsheet, FileImage, FileText } from "lucide-react";
 import type { DataRow, FilterRule, Widget } from "@/types";
 import WidgetCard from "./WidgetCard";
 import WidgetLibraryModal from "./WidgetLibraryModal";
 import { applyFilters } from "@/utils/filterUtils";
-import { exportNodeToPdf, exportRowsToExcel } from "@/utils/exportUtils";
+import { exportNodeToPdf, exportNodeToWord, exportRowsToExcel } from "@/utils/exportUtils";
 
 interface DashboardGridProps {
   widgets: Widget[];
@@ -33,6 +33,7 @@ export default function DashboardGrid({
   widgets, rows, filters, searchTerm, columns, datasetName, onWidgetsChange, onDrillDown,
 }: DashboardGridProps) {
   const [showLibrary, setShowLibrary] = useState(false);
+  const [exportingWord, setExportingWord] = useState(false);
   const gridRef = useRef<HTMLDivElement>(null);
 
   const filteredRows = applyFilters(
@@ -71,6 +72,16 @@ export default function DashboardGrid({
 
   const handleExportExcel = () => exportRowsToExcel(filteredRows, datasetName, datasetName);
 
+  const handleExportWord = async () => {
+    if (!gridRef.current) return;
+    setExportingWord(true);
+    try {
+      await exportNodeToWord(gridRef.current, datasetName, `${datasetName} — Dashboard Report`, filteredRows);
+    } finally {
+      setExportingWord(false);
+    }
+  };
+
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
@@ -81,6 +92,9 @@ export default function DashboardGrid({
           </button>
           <button onClick={handleExportExcel} className="btn-secondary flex items-center gap-1.5 text-sm">
             <FileSpreadsheet size={15} /> Excel
+          </button>
+          <button onClick={handleExportWord} disabled={exportingWord} className="btn-secondary flex items-center gap-1.5 text-sm">
+            <FileText size={15} /> {exportingWord ? "Generating…" : "Word"}
           </button>
           <button onClick={handleExportPdf} className="btn-secondary flex items-center gap-1.5 text-sm">
             <FileImage size={15} /> PDF
