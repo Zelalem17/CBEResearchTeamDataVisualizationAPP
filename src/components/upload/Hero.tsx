@@ -32,7 +32,7 @@ export default function Hero() {
     <div className="rounded-2xl overflow-hidden shadow-glow">
       <div className="bg-brand-gradient px-6 py-10 sm:px-10 sm:py-14 text-center relative">
         <div className="absolute inset-0 opacity-[0.07] bg-[radial-gradient(circle_at_20%_20%,white,transparent_35%),radial-gradient(circle_at_80%_60%,white,transparent_30%)]" />
-        <img src={CBE} alt="Commercial Bank of Ethiopia" className="relative w-16 h-16 mx-auto mb-4 rounded-2xl shadow-lg object-contain" />
+        <img src={logo} alt="Commercial Bank of Ethiopia" className="relative w-16 h-16 mx-auto mb-4 rounded-2xl shadow-lg object-contain" />
         <span className="relative inline-flex items-center gap-1.5 text-gold-300 text-xs font-semibold uppercase tracking-widest bg-white/10 rounded-full px-3 py-1 mb-4">
           <Sparkles size={12} /> Instant Data Dashboards
         </span>
