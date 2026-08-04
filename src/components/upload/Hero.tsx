@@ -15,7 +15,7 @@ const FEATURES = [
   {
     icon: DownloadCloud,
     title: "Export anywhere",
-    text: "Download your dashboard as PNG, PDF, or Excel — filtered exactly the way you're viewing it.",
+    text: "Download your dashboard as PNG, PDF, or Excel filtered exactly the way you're viewing it.",
   },
   {
     icon: ShieldCheck,
@@ -24,7 +24,7 @@ const FEATURES = [
   },
 ];
 
-/** The landing hero shown before any dataset has been imported — explains
+/** The landing hero shown before any dataset has been imported   explains
  * what the app does before asking the user to drop in a file. */
 export default function Hero() {
   return (
