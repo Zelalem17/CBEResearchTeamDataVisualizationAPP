@@ -42,8 +42,8 @@ export default function KpiCard({ widget, rows }: KpiCardProps) {
   const isDown = deltaPct < -0.5;
 
   return (
-    <div className="h-full flex flex-col justify-between p-1">
-      <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">{widget.title}</span>
+    <div className="h-full flex flex-col justify-between p-1.5">
+      <span className="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide leading-relaxed">{widget.title}</span>
       <div className="flex items-end justify-between mt-1">
         <span className="text-3xl font-bold text-gray-900 dark:text-white tabular-nums">{formatNumber(value)}</span>
         <span className={`flex items-center gap-1 text-xs font-semibold ${isUp ? "text-emerald-600" : isDown ? "text-rose-600" : "text-gray-400"}`}>
