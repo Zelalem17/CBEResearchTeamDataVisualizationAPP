@@ -152,9 +152,11 @@ export interface ExportableWidget {
  * document assembly, fonts, colors — happens client-side; no server
  * involved, same as the PDF/Excel/PNG exports.
  *
- * `gridNode` is the dashboard grid container; each widget inside it must
- * carry a `data-widget-id="<id>"` attribute (DashboardGrid sets this) so
- * each one can be located and screenshotted separately.
+ * `gridNode` is the dashboard grid container; each widget's root element
+ * inside it carries a `data-widget-capture="<id>"` attribute (set on
+ * WidgetCard's own root, not the react-grid-layout item that positions
+ * it — see the note below) so each one can be located and screenshotted
+ * separately.
  */
 export async function exportDashboardToWord(
   gridNode: HTMLElement,
@@ -185,7 +187,15 @@ export async function exportDashboardToWord(
 
   // --- One image per widget, each with its own heading ---
   for (const widget of widgets) {
-    const node = gridNode.querySelector<HTMLElement>(`[data-widget-id="${widget.id}"]`);
+    // Deliberately targets WidgetCard's own root element (marked with
+    // data-widget-capture), NOT the react-grid-layout grid-item that wraps
+    // it — that wrapper is positioned via a CSS transform, and html2canvas
+    // has a known quirk where capturing a transformed element crops a few
+    // pixels off the top of its content (this is what caused widget titles
+    // to render half-cut in earlier exports). The per-widget PNG button
+    // was never affected because it already targets this same safe inner
+    // element via WidgetCard's own ref.
+    const node = gridNode.querySelector<HTMLElement>(`[data-widget-capture="${widget.id}"]`);
     if (!node) continue;
 
     const { buffer, ratio } = await screenshotNode(node);
