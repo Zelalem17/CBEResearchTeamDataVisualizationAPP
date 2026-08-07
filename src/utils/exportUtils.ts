@@ -23,7 +23,30 @@ const ROW_STRIPE = "F9FAFB";
 // clean, modern, widely-installed font instead.
 const DOC_FONT = "Calibri";
 
+/** html2canvas screenshots a *cloned* copy of the DOM. If the page's custom
+ * web font (Poppins, loaded from Google Fonts) hasn't finished loading by
+ * the moment that clone is captured, the clone briefly renders with a
+ * fallback font — which has different letter height/metrics — and any
+ * text sitting in a tightly-padded container (like a KPI label) can end up
+ * visibly clipped in the exported image even though it looks fine on
+ * screen. Waiting for `document.fonts.ready`, plus one extra paint frame
+ * for layout to settle, eliminates that mismatch. Every screenshot in this
+ * file goes through this first. */
+async function ensureFontsReady(): Promise<void> {
+  if (typeof document !== "undefined" && "fonts" in document) {
+    try {
+      await (document as any).fonts.ready;
+    } catch {
+      /* older browsers without the Font Loading API — safe to ignore */
+    }
+  }
+  // One extra animation frame so any font-swap reflow has actually painted
+  // before html2canvas clones the DOM.
+  await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+}
+
 async function screenshotNode(node: HTMLElement): Promise<{ buffer: ArrayBuffer; ratio: number }> {
+  await ensureFontsReady();
   const canvas = await html2canvas(node, {
     backgroundColor: getComputedStyle(document.body).backgroundColor || "#ffffff",
     scale: 2,
@@ -37,6 +60,7 @@ async function screenshotNode(node: HTMLElement): Promise<{ buffer: ArrayBuffer;
 /** Export a single DOM node (a widget card, or the whole dashboard grid)
  * as a PNG image. */
 export async function exportNodeToPng(node: HTMLElement, filename: string) {
+  await ensureFontsReady();
   const canvas = await html2canvas(node, {
     backgroundColor: getComputedStyle(document.body).backgroundColor || "#ffffff",
     scale: 2,
@@ -53,6 +77,7 @@ export async function exportNodeToPng(node: HTMLElement, filename: string) {
  * a styled brand-purple title and gold accent rule instead of jsPDF's
  * plain default black text. */
 export async function exportNodeToPdf(node: HTMLElement, filename: string, title?: string) {
+  await ensureFontsReady();
   const canvas = await html2canvas(node, {
     backgroundColor: getComputedStyle(document.body).backgroundColor || "#ffffff",
     scale: 2,
