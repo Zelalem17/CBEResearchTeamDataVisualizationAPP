@@ -120,7 +120,7 @@ export default function DashboardGrid({
           margin={[12, 12]}
         >
           {widgets.map((widget) => (
-            <div key={widget.id} data-widget-id={widget.id}>
+            <div key={widget.id}>
               <WidgetCard
                 widget={widget}
                 rows={filteredRows}
