@@ -23,7 +23,7 @@ export default function WidgetCard({ widget, rows, onRemove, onDrillDown }: Widg
   };
 
   return (
-    <div ref={nodeRef} className="card h-full flex flex-col overflow-hidden group">
+    <div ref={nodeRef} data-widget-capture={widget.id} className="card h-full flex flex-col overflow-hidden group">
       <div className="widget-drag-handle flex items-center justify-between px-3 py-2 border-b border-gray-100 dark:border-gray-800 cursor-move">
         <div className="flex items-center gap-1.5 min-w-0">
           <GripVertical size={14} className="text-gray-300 dark:text-gray-600 shrink-0" />
