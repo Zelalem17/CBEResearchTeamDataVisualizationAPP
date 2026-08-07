@@ -7,7 +7,7 @@ import type { DataRow, FilterRule, Widget } from "@/types";
 import WidgetCard from "./WidgetCard";
 import WidgetLibraryModal from "./WidgetLibraryModal";
 import { applyFilters } from "@/utils/filterUtils";
-import { exportNodeToPdf, exportNodeToWord, exportRowsToExcel } from "@/utils/exportUtils";
+import { exportNodeToPdf, exportDashboardToWord, exportRowsToExcel } from "@/utils/exportUtils";
 
 interface DashboardGridProps {
   widgets: Widget[];
@@ -76,7 +76,13 @@ export default function DashboardGrid({
     if (!gridRef.current) return;
     setExportingWord(true);
     try {
-      await exportNodeToWord(gridRef.current, datasetName, `${datasetName} — Dashboard Report`, filteredRows);
+      await exportDashboardToWord(
+        gridRef.current,
+        widgets.map((w) => ({ id: w.id, title: w.title })),
+        datasetName,
+        `${datasetName} — Dashboard Report`,
+        filteredRows
+      );
     } finally {
       setExportingWord(false);
     }
@@ -114,7 +120,7 @@ export default function DashboardGrid({
           margin={[12, 12]}
         >
           {widgets.map((widget) => (
-            <div key={widget.id}>
+            <div key={widget.id} data-widget-id={widget.id}>
               <WidgetCard
                 widget={widget}
                 rows={filteredRows}
