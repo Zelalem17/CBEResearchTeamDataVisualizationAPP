@@ -11,7 +11,9 @@ interface WidgetLibraryModalProps {
 const WIDGET_TYPES: { type: WidgetType; label: string; icon: any }[] = [
   { type: "kpi", label: "KPI Card", icon: TrendingUp },
   { type: "bar", label: "Bar chart", icon: BarChart3 },
+  { type: "grouped_bar", label: "Grouped bar (compare)", icon: BarChart3 },
   { type: "line", label: "Line chart", icon: LineChart },
+  { type: "grouped_line", label: "Grouped line (compare)", icon: LineChart },
   { type: "area", label: "Area chart", icon: Activity },
   { type: "pie", label: "Pie chart", icon: PieChart },
   { type: "scatter", label: "Scatter plot", icon: ScatterChart },
@@ -26,6 +28,7 @@ const DEFAULT_SIZE: Record<WidgetType, { w: number; h: number }> = {
   kpi: { w: 3, h: 2 }, bar: { w: 6, h: 4 }, line: { w: 6, h: 4 }, area: { w: 6, h: 4 },
   pie: { w: 4, h: 4 }, scatter: { w: 6, h: 4 }, histogram: { w: 4, h: 4 },
   heatmap: { w: 6, h: 4 }, treemap: { w: 6, h: 5 }, gauge: { w: 3, h: 3 }, table: { w: 12, h: 6 },
+  grouped_bar: { w: 6, h: 4 }, grouped_line: { w: 6, h: 4 },
 };
 
 /** Modal used to add a new widget to the dashboard: pick a chart type,
@@ -37,6 +40,7 @@ export default function WidgetLibraryModal({ columns, onAdd, onClose }: WidgetLi
 
   const [fieldA, setFieldA] = useState(dimensions[0]?.name ?? columns[0]?.name ?? "");
   const [fieldB, setFieldB] = useState(measures[0]?.name ?? columns[1]?.name ?? "");
+  const [fieldC, setFieldC] = useState(dimensions[1]?.name ?? dimensions[0]?.name ?? columns[0]?.name ?? "");
 
   const handleAdd = () => {
     if (!selected) return;
@@ -53,6 +57,9 @@ export default function WidgetLibraryModal({ columns, onAdd, onClose }: WidgetLi
       case "treemap": widget = { ...base, title: `${fieldB} breakdown`, config: { levels: [fieldA], value: fieldB } }; break;
       case "gauge": widget = { ...base, title: `${fieldB} (avg)`, config: { field: fieldB, agg: "avg" } }; break;
       case "table": widget = { ...base, title: "Data table", config: { columns: columns.map((c) => c.name), page_size: 25 } }; break;
+      case "grouped_bar": case "grouped_line":
+        widget = { ...base, title: `${fieldB} by ${fieldA}, compared by ${fieldC}`, config: { x: fieldA, y: fieldB, seriesField: fieldC, agg: "sum" } };
+        break;
       default: widget = { ...base, title: `${fieldB} by ${fieldA}`, config: { x: fieldA, y: fieldB, agg: "sum" } };
     }
     onAdd(widget);
@@ -108,6 +115,14 @@ export default function WidgetLibraryModal({ columns, onAdd, onClose }: WidgetLi
                   </select>
                 </div>
               </>
+            )}
+            {(selected === "grouped_bar" || selected === "grouped_line") && (
+              <div className="col-span-2">
+                <label className="text-xs text-gray-500 mb-1 block">Compare by (series)</label>
+                <select className="input text-sm" value={fieldC} onChange={(e) => setFieldC(e.target.value)}>
+                  {columns.map((c) => <option key={c.name} value={c.name}>{c.name}</option>)}
+                </select>
+              </div>
             )}
           </div>
         )}
