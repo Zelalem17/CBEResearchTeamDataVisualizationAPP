@@ -20,7 +20,8 @@ export interface RelationshipHint {
 
 export type WidgetType =
   | "kpi" | "bar" | "line" | "pie" | "area" | "scatter"
-  | "histogram" | "heatmap" | "treemap" | "gauge" | "table";
+  | "histogram" | "heatmap" | "treemap" | "gauge" | "table"
+  | "grouped_bar" | "grouped_line";
 
 export interface WidgetPosition {
   x: number;
