@@ -32,8 +32,32 @@ function groupAndAgg(rows: DataRow[], groupField: string, valueField?: string, a
 const baseTooltip = { trigger: "axis" as const, backgroundColor: "rgba(17,24,39,0.92)", borderWidth: 0, textStyle: { color: "#fff" } };
 const baseGrid = { left: 48, right: 24, top: 32, bottom: 40, containLabel: true };
 
+/** Applies optional widget-level prefilters (config.filters: [{field,
+ * value}]) before any aggregation. Lets a single dataset's rows be
+ * sliced down to e.g. { Section: "ATM", Metric: "Total No. of ATM
+ * Machines" } for one widget, independent of the dashboard's global
+ * filters. No-op when config.filters is absent. */
+export function applyConfigFilters(rows: DataRow[], config: any): DataRow[] {
+  const filters: { field: string; value: string }[] = config?.filters ?? [];
+  if (!filters.length) return rows;
+  return rows.filter((row) => filters.every((f) => String(row[f.field] ?? "") === String(f.value)));
+}
+
+function aggValues(vals: number[], agg: string): number {
+  if (!vals.length) return 0;
+  switch (agg) {
+    case "avg": return vals.reduce((a, b) => a + b, 0) / vals.length;
+    case "count": return vals.length;
+    case "min": return Math.min(...vals);
+    case "max": return Math.max(...vals);
+    case "latest": return vals[vals.length - 1];
+    default: return vals.reduce((a, b) => a + b, 0);
+  }
+}
+
 export function buildBarOption(rows: DataRow[], config: any) {
-  const data = groupAndAgg(rows, config.x, config.y, config.agg ?? "sum").slice(0, 15);
+  const scoped = applyConfigFilters(rows, config);
+  const data = groupAndAgg(scoped, config.x, config.y, config.agg ?? "sum").slice(0, 15);
   return {
     color: PALETTE,
     tooltip: baseTooltip,
@@ -45,7 +69,8 @@ export function buildBarOption(rows: DataRow[], config: any) {
 }
 
 export function buildLineOption(rows: DataRow[], config: any, area = false) {
-  const data = groupAndAgg(rows, config.x, config.y, config.agg ?? "sum")
+  const scoped = applyConfigFilters(rows, config);
+  const data = groupAndAgg(scoped, config.x, config.y, config.agg ?? "sum")
     .sort((a, b) => (a.key > b.key ? 1 : -1));
   return {
     color: PALETTE,
@@ -61,7 +86,8 @@ export function buildLineOption(rows: DataRow[], config: any, area = false) {
 }
 
 export function buildPieOption(rows: DataRow[], config: any) {
-  const data = groupAndAgg(rows, config.category, config.value, config.agg ?? "sum").slice(0, 10);
+  const scoped = applyConfigFilters(rows, config);
+  const data = groupAndAgg(scoped, config.category, config.value, config.agg ?? "sum").slice(0, 10);
   return {
     color: PALETTE,
     tooltip: { trigger: "item", backgroundColor: "rgba(17,24,39,0.92)", textStyle: { color: "#fff" } },
@@ -190,9 +216,90 @@ export function buildGaugeOption(rows: DataRow[], config: any) {
   };
 }
 
+/** Grouped/clustered bar chart: one bar per (x, seriesField) pair — e.g.
+ * x = Period (fiscal year), seriesField = Category (CBE vs Industry), so
+ * the two categories sit side-by-side for every period instead of being
+ * collapsed into one. This is what makes a CBE-vs-Industry style
+ * comparison possible instead of only ever showing a single series. */
+export function buildGroupedBarOption(rows: DataRow[], config: any) {
+  const scoped = applyConfigFilters(rows, config);
+  const xField = config.x;
+  const seriesField = config.seriesField;
+  const valueField = config.y;
+  const agg = config.agg ?? "sum";
+
+  const xValues = Array.from(new Set(scoped.map((r) => String(r[xField] ?? "—")))).sort();
+  const seriesValues = Array.from(new Set(scoped.map((r) => String(r[seriesField] ?? "—"))));
+
+  const series = seriesValues.map((sv, i) => {
+    const data = xValues.map((xv) => {
+      const matching = scoped.filter((r) => String(r[xField] ?? "—") === xv && String(r[seriesField] ?? "—") === sv);
+      const vals = matching.map((r) => Number(r[valueField])).filter(Number.isFinite);
+      if (!vals.length) return null;
+      return Math.round(aggValues(vals, agg) * 10000) / 10000;
+    });
+    return {
+      name: sv, type: "bar", data,
+      itemStyle: { borderRadius: [4, 4, 0, 0], color: PALETTE[i % PALETTE.length] },
+      barMaxWidth: 28,
+    };
+  });
+
+  return {
+    color: PALETTE,
+    tooltip: { ...baseTooltip, axisPointer: { type: "shadow" } },
+    legend: { bottom: 0, textStyle: { fontSize: 11 } },
+    grid: { ...baseGrid, bottom: 56 },
+    xAxis: { type: "category", data: xValues, axisLabel: { rotate: xValues.length > 6 ? 30 : 0 } },
+    yAxis: { type: "value" },
+    series,
+  };
+}
+
+/** Same idea as buildGroupedBarOption but as multiple line series — one
+ * line per category (e.g. CBE, Industry) trending across x (e.g. Period),
+ * so trends can be compared directly rather than just magnitudes. */
+export function buildGroupedLineOption(rows: DataRow[], config: any) {
+  const scoped = applyConfigFilters(rows, config);
+  const xField = config.x;
+  const seriesField = config.seriesField;
+  const valueField = config.y;
+  const agg = config.agg ?? "sum";
+
+  const xValues = Array.from(new Set(scoped.map((r) => String(r[xField] ?? "—")))).sort();
+  const seriesValues = Array.from(new Set(scoped.map((r) => String(r[seriesField] ?? "—"))));
+
+  const series = seriesValues.map((sv, i) => {
+    const data = xValues.map((xv) => {
+      const matching = scoped.filter((r) => String(r[xField] ?? "—") === xv && String(r[seriesField] ?? "—") === sv);
+      const vals = matching.map((r) => Number(r[valueField])).filter(Number.isFinite);
+      if (!vals.length) return null;
+      return Math.round(aggValues(vals, agg) * 10000) / 10000;
+    });
+    return {
+      name: sv, type: "line", data, smooth: true, symbol: "circle", symbolSize: 6,
+      lineStyle: { width: 2.5, color: PALETTE[i % PALETTE.length] },
+      itemStyle: { color: PALETTE[i % PALETTE.length] },
+      connectNulls: true,
+    };
+  });
+
+  return {
+    color: PALETTE,
+    tooltip: { ...baseTooltip, axisPointer: { type: "line" } },
+    legend: { bottom: 0, textStyle: { fontSize: 11 } },
+    grid: { ...baseGrid, bottom: 56 },
+    xAxis: { type: "category", data: xValues, boundaryGap: false, axisLabel: { rotate: xValues.length > 6 ? 30 : 0 } },
+    yAxis: { type: "value" },
+    series,
+  };
+}
+
 export function buildOptionForWidget(widget: Widget, rows: DataRow[]) {
   switch (widget.type) {
     case "bar": return buildBarOption(rows, widget.config);
+    case "grouped_bar": return buildGroupedBarOption(rows, widget.config);
+    case "grouped_line": return buildGroupedLineOption(rows, widget.config);
     case "line": return buildLineOption(rows, widget.config, false);
     case "area": return buildLineOption(rows, widget.config, true);
     case "pie": return buildPieOption(rows, widget.config);
