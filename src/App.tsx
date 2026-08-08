@@ -29,8 +29,8 @@ export default function App() {
   const datasetList = Object.values(tabs).map((t) => t.dataset);
   const activeTab = activeDatasetId ? tabs[activeDatasetId] : null;
 
-  const handleImported = (dataset: Dataset, widgets: Widget[], rows: any[]) => {
-    addDataset(dataset, widgets, rows);
+  const handleImported = (dataset: Dataset, widgets: Widget[], rows: any[], panelChartKind?: Parameters<typeof addDataset>[3]) => {
+    addDataset(dataset, widgets, rows, panelChartKind);
     setShowUpload(false);
   };
 
