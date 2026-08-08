@@ -115,8 +115,51 @@ export function buildScatterOption(rows: DataRow[], config: any) {
   };
 }
 
+/** Scatter that plots one comparison category against another instead
+ * of two fields on the same row — e.g. CBE's value vs Industry's value
+ * for each period, one point per period. Used for the "Scatter (A vs B)"
+ * panel chart kind. Falls back to a friendly empty state when fewer
+ * than 2 categories are present after filtering. */
+export function buildCategoryScatterOption(rows: DataRow[], config: any) {
+  const scoped = applyConfigFilters(rows, config);
+  const seriesField = config.seriesField ?? "Category";
+  const xRowField = config.x;
+  const valueField = config.y ?? "Value";
+
+  const cats = Array.from(new Set(scoped.map((r) => String(r[seriesField])))).slice(0, 2);
+  if (cats.length < 2) {
+    return {
+      title: { text: "Need at least 2 categories to compare", left: "center", top: "middle", textStyle: { fontSize: 12, color: "#94a3b8" } },
+      series: [],
+    };
+  }
+  const [catA, catB] = cats;
+  const xLabels = Array.from(new Set(scoped.map((r) => String(r[xRowField] ?? "—"))));
+  const points: [number, number, string][] = [];
+  for (const label of xLabels) {
+    const a = scoped.find((r) => String(r[xRowField] ?? "—") === label && String(r[seriesField]) === catA);
+    const b = scoped.find((r) => String(r[xRowField] ?? "—") === label && String(r[seriesField]) === catB);
+    if (!a || !b) continue;
+    const av = Number(a[valueField]), bv = Number(b[valueField]);
+    if (Number.isFinite(av) && Number.isFinite(bv)) points.push([av, bv, label]);
+  }
+
+  return {
+    color: PALETTE,
+    tooltip: {
+      trigger: "item", backgroundColor: "rgba(17,24,39,0.92)", borderWidth: 0, textStyle: { color: "#fff" },
+      formatter: (p: any) => `${p.data[2]}<br/>${catA}: ${p.data[0]}<br/>${catB}: ${p.data[1]}`,
+    },
+    grid: baseGrid,
+    xAxis: { type: "value", name: catA, nameLocation: "middle", nameGap: 28 },
+    yAxis: { type: "value", name: catB, nameLocation: "middle", nameGap: 45 },
+    series: [{ type: "scatter", data: points, symbolSize: 12, itemStyle: { opacity: 0.75, color: PALETTE[0] } }],
+  };
+}
+
 export function buildHistogramOption(rows: DataRow[], config: any) {
-  const values = rows.map((r) => Number(r[config.field])).filter(Number.isFinite);
+  const scoped = applyConfigFilters(rows, config);
+  const values = scoped.map((r) => Number(r[config.field])).filter(Number.isFinite);
   const bins = config.bins ?? 20;
   if (!values.length) return { series: [] };
   const min = Math.min(...values), max = Math.max(...values);
@@ -240,8 +283,9 @@ export function buildGroupedBarOption(rows: DataRow[], config: any) {
     });
     return {
       name: sv, type: "bar", data,
-      itemStyle: { borderRadius: [4, 4, 0, 0], color: PALETTE[i % PALETTE.length] },
+      itemStyle: { borderRadius: config.stacked ? [0, 0, 0, 0] : [4, 4, 0, 0], color: PALETTE[i % PALETTE.length] },
       barMaxWidth: 28,
+      ...(config.stacked ? { stack: "total" } : {}),
     };
   });
 
@@ -281,6 +325,7 @@ export function buildGroupedLineOption(rows: DataRow[], config: any) {
       lineStyle: { width: 2.5, color: PALETTE[i % PALETTE.length] },
       itemStyle: { color: PALETTE[i % PALETTE.length] },
       connectNulls: true,
+      ...(config.area ? { areaStyle: { opacity: 0.18, color: PALETTE[i % PALETTE.length] } } : {}),
     };
   });
 
@@ -304,6 +349,7 @@ export function buildOptionForWidget(widget: Widget, rows: DataRow[]) {
     case "area": return buildLineOption(rows, widget.config, true);
     case "pie": return buildPieOption(rows, widget.config);
     case "scatter": return buildScatterOption(rows, widget.config);
+    case "category_scatter": return buildCategoryScatterOption(rows, widget.config);
     case "histogram": return buildHistogramOption(rows, widget.config);
     case "heatmap": return buildHeatmapOption(rows, widget.config);
     case "treemap": return buildTreemapOption(rows, widget.config);
