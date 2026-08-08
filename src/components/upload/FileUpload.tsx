@@ -3,11 +3,11 @@ import { UploadCloud, Loader2, FileSpreadsheet } from "lucide-react";
 import { parseFile, parseExcelSheet } from "@/services/fileParser";
 import { profileRows } from "@/services/dataAnalysis";
 import { generateWidgets } from "@/services/dashboardGenerator";
-import { isPanelSchema, generatePanelComparisonWidgets } from "@/services/comparisonDashboard";
+import { isPanelSchema, generatePanelComparisonWidgets, defaultPanelChartKind } from "@/services/comparisonDashboard";
 import type { Dataset, Widget } from "@/types";
 
 interface FileUploadProps {
-  onImported: (dataset: Dataset, widgets: Widget[], rows: any[]) => void;
+  onImported: (dataset: Dataset, widgets: Widget[], rows: any[], panelChartKind?: ReturnType<typeof defaultPanelChartKind>) => void;
 }
 
 /** Drag-and-drop / click-to-browse import for CSV & Excel files.
@@ -28,10 +28,12 @@ export default function FileUpload({ onImported }: FileUploadProps) {
     const { columns, relationships } = profileRows(rows);
     // Sectioned-panel sheets (e.g. CBE vs Industry across ATM/POS/...
     // sections) get comparison-first widgets — every section shown
-    // side-by-side by category — instead of the generic single-series
-    // widget set.
-    const rawWidgets = isPanelSchema(rows)
-      ? generatePanelComparisonWidgets(rows)
+    // side-by-side by category, in a chart kind the user can switch at
+    // any time via the picker at the top of the dashboard.
+    const panel = isPanelSchema(rows);
+    const panelChartKind = panel ? defaultPanelChartKind(rows) : undefined;
+    const rawWidgets = panel
+      ? generatePanelComparisonWidgets(rows, panelChartKind)
       : generateWidgets(columns, relationships);
     const widgets: Widget[] = rawWidgets.map((w) => ({ ...w, id: crypto.randomUUID() }));
     const dataset: Dataset = {
@@ -41,7 +43,7 @@ export default function FileUpload({ onImported }: FileUploadProps) {
       columns,
       relationships,
     };
-    onImported(dataset, widgets, rows);
+    onImported(dataset, widgets, rows, panelChartKind);
   };
 
   const handleFile = useCallback(async (file: File) => {
