@@ -1,8 +1,10 @@
 import { Maximize2 } from "lucide-react";
 import GlobalFilters from "@/components/filters/GlobalFilters";
 import DashboardGrid from "@/components/dashboard/DashboardGrid";
+import ChartTypePicker from "@/components/dashboard/ChartTypePicker";
 import { useDashboardStore } from "@/store/dashboardStore";
-import { useState } from "react";
+import { isPanelSchema, defaultPanelChartKind } from "@/services/comparisonDashboard";
+import { useState, useMemo } from "react";
 
 interface DatasetSectionProps {
   datasetId: string;
@@ -21,7 +23,14 @@ export default function DatasetSection({ datasetId, showHeader }: DatasetSection
   const setFilters = useDashboardStore((s) => s.setFilters);
   const setActiveDataset = useDashboardStore((s) => s.setActiveDataset);
   const setViewMode = useDashboardStore((s) => s.setViewMode);
+  const setPanelChartKind = useDashboardStore((s) => s.setPanelChartKind);
   const [searchTerm, setSearchTerm] = useState("");
+
+  const isPanel = useMemo(() => (tab ? isPanelSchema(tab.rows) : false), [tab]);
+  const sectionCount = useMemo(
+    () => (isPanel && tab ? new Set(tab.rows.map((r) => String(r.Section))).size : 0),
+    [isPanel, tab]
+  );
 
   if (!tab) return null;
 
@@ -49,6 +58,14 @@ export default function DatasetSection({ datasetId, showHeader }: DatasetSection
             <Maximize2 size={13} /> Focus
           </button>
         </div>
+      )}
+
+      {isPanel && (
+        <ChartTypePicker
+          value={tab.panelChartKind ?? defaultPanelChartKind(tab.rows)}
+          onChange={(kind) => setPanelChartKind(datasetId, kind)}
+          sectionCount={sectionCount}
+        />
       )}
 
       <GlobalFilters
