@@ -7,6 +7,14 @@ interface KpiCardProps {
   rows: DataRow[];
 }
 
+/** Optional widget-level prefilters (config.filters: [{field, value}]),
+ * same mechanism as the chart builders — lets a KPI isolate e.g.
+ * { Section: "ATM", Category: "CBE" } from the rest of the dataset. */
+function applyConfigFilters(rows: DataRow[], filters?: { field: string; value: string }[]): DataRow[] {
+  if (!filters?.length) return rows;
+  return rows.filter((row) => filters.every((f) => String(row[f.field] ?? "") === String(f.value)));
+}
+
 function aggregate(rows: DataRow[], field: string, agg: string): number {
   const values = rows.map((r) => Number(r[field])).filter(Number.isFinite);
   if (!values.length) return 0;
@@ -15,6 +23,7 @@ function aggregate(rows: DataRow[], field: string, agg: string): number {
     case "count": return values.length;
     case "min": return Math.min(...values);
     case "max": return Math.max(...values);
+    case "latest": return values[values.length - 1];
     default: return values.reduce((a, b) => a + b, 0);
   }
 }
@@ -26,17 +35,18 @@ function formatNumber(n: number): string {
 }
 
 export default function KpiCard({ widget, rows }: KpiCardProps) {
-  const { field, agg = "sum" } = widget.config;
+  const { field, agg = "sum", filters } = widget.config;
 
   const { value, deltaPct } = useMemo(() => {
-    const total = aggregate(rows, field, agg);
+    const scoped = applyConfigFilters(rows, filters);
+    const total = aggregate(scoped, field, agg);
     // Split rows in half to approximate a trend indicator (first half vs second half)
-    const mid = Math.floor(rows.length / 2);
-    const first = aggregate(rows.slice(0, mid), field, agg);
-    const second = aggregate(rows.slice(mid), field, agg);
+    const mid = Math.floor(scoped.length / 2);
+    const first = aggregate(scoped.slice(0, mid), field, agg);
+    const second = aggregate(scoped.slice(mid), field, agg);
     const delta = first === 0 ? 0 : ((second - first) / Math.abs(first)) * 100;
     return { value: total, deltaPct: delta };
-  }, [rows, field, agg]);
+  }, [rows, field, agg, filters]);
 
   const isUp = deltaPct > 0.5;
   const isDown = deltaPct < -0.5;
