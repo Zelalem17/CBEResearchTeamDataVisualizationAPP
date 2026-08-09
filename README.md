@@ -74,8 +74,58 @@ src/
 └── App.tsx                    single-page workspace
 ```
 
+## Access control (login gate)
+
+The whole app sits behind a password screen (`src/components/auth/`).
+There are two roles, each with its own password:
+
+| Role | Can do |
+|---|---|
+| **admin** | Everything: upload data, add/remove/rearrange widgets, switch chart types |
+| **viewer** | Read-only: view whatever's loaded, use filters and drill-down, export — no upload/edit |
+
+**Setup:**
+```bash
+npm run hash-password -- "yourAdminPassword"    # copy the printed hash
+npm run hash-password -- "yourViewerPassword"   # copy the printed hash
+cp .env.example .env
+# paste the two hashes into .env as VITE_ADMIN_PASSWORD_HASH / VITE_VIEWER_PASSWORD_HASH
+npm run build
+```
+Vite only reads `.env` at build time, so redeploy after changing it. Leave
+one role's hash blank to disable that role entirely. If you deploy with
+neither hash set, the production build shows a "not configured" screen
+instead of silently letting everyone in; `npm run dev` skips the gate
+locally so you're never locked out while developing.
+
+**Please read this before trusting it:** this is a fully static site with
+no backend, so the password check runs in the visitor's own browser
+against a hash baked into the JavaScript bundle. It stops casual visitors
+and search engines from wandering into a link you don't want indexed — it
+does **not** stop a determined, technically inclined person, who can read
+the hash from devtools, brute-force it offline, or patch the running app.
+Don't use it to gate anything genuinely sensitive. For real authentication
+on a static site, put it behind a hosted provider instead — Netlify
+Identity, Cloudflare Access, Auth0, or Supabase Auth all work with no
+backend code of your own, and Cloudflare Access in particular can protect
+a static site with zero app changes (it gates the URL itself).
+
+**One more limitation worth knowing:** roles only control what a given
+browser *session* is allowed to do — they don't create shared storage.
+Because there's no backend, each visitor's uploaded data lives only in
+their own browser's `localStorage`; an admin uploading a dataset does
+**not** make it appear for a viewer opening the same link on a different
+device. If you want "admin curates a dashboard once, everyone with the
+link sees it," the practical static-site pattern is: have the admin
+export the finished dataset (or its dashboard config) to a JSON/CSV file,
+commit it under `public/data/`, and have the app auto-load it for every
+visitor on startup — that part isn't wired up yet, but the role split
+above is exactly the seam to hang it on.
+
+
 ## Limitations vs. the full-stack version
-- No auth, no multi-user sharing — this is a personal, local-only tool.
+- Password gate is a static-JS check, not real auth (see above) — no
+  multi-user data sharing, since there's no backend/database.
 - No live database connections (MySQL/Postgres/etc.) — those need a server
   to hold credentials and run queries; a static site can't do that safely.
 - Large files: everything is parsed and aggregated in-browser, so very
