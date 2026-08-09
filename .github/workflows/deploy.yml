@@ -23,12 +23,19 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: "npm"
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
       - name: Build
         run: npm run build
+        env:
+          # Read from Settings → Secrets and variables → Actions.
+          # See .env.example / README.md for how to generate these:
+          #   npm run hash-password -- "yourPassword"
+          VITE_ADMIN_PASSWORD_HASH: ${{ secrets.VITE_ADMIN_PASSWORD_HASH }}
+          VITE_VIEWER_PASSWORD_HASH: ${{ secrets.VITE_VIEWER_PASSWORD_HASH }}
 
       - uses: actions/configure-pages@v5
 
