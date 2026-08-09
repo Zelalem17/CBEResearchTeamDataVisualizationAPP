@@ -27,15 +27,19 @@ export type PanelChartKind =
   | "grouped_line"
   | "grouped_area"
   | "pie"
+  | "pie_detailed"
+  | "bar_detailed"
   | "category_scatter"
   | "histogram";
 
 export const PANEL_CHART_KINDS: { kind: PanelChartKind; label: string; description: string }[] = [
   { kind: "grouped_bar", label: "Grouped bar", description: "Categories side-by-side per period" },
+  { kind: "bar_detailed", label: "Bar (values + %)", description: "Bars plus a value/percentage list" },
   { kind: "stacked_bar", label: "Stacked bar", description: "Categories stacked per period" },
   { kind: "grouped_line", label: "Grouped line", description: "One trend line per category" },
   { kind: "grouped_area", label: "Grouped area", description: "Filled trend line per category" },
   { kind: "pie", label: "Pie (share)", description: "Each category's overall share" },
+  { kind: "pie_detailed", label: "Pie (values + %)", description: "Pie plus a value/percentage list" },
   { kind: "category_scatter", label: "Scatter (A vs B)", description: "One category plotted against the other" },
   { kind: "histogram", label: "Histogram", description: "Distribution of all values" },
 ];
@@ -72,6 +76,10 @@ function buildComparisonWidgetSpec(kind: PanelChartKind, xField: string, section
       return { type: "grouped_line", config: { x: xField, y: "Value", seriesField: "Category", agg: "sum", area: true, filters, comparisonKey } };
     case "pie":
       return { type: "pie", config: { category: "Category", value: "Value", agg: "sum", filters, comparisonKey } };
+    case "pie_detailed":
+      return { type: "pie_detailed", config: { category: "Category", value: "Value", agg: "sum", listPosition: "right", filters, comparisonKey } };
+    case "bar_detailed":
+      return { type: "bar_detailed", config: { x: "Category", y: "Value", agg: "sum", listPosition: "right", filters, comparisonKey } };
     case "category_scatter":
       return { type: "category_scatter", config: { x: xField, y: "Value", seriesField: "Category", filters, comparisonKey } };
     case "histogram":
@@ -106,7 +114,11 @@ export function generatePanelComparisonWidgets(rows: DataRow[], kind?: PanelChar
     );
     for (const metric of metricsInSection) {
       const spec = buildComparisonWidgetSpec(effectiveKind, xField, section, metric);
-      widgets.push({ type: spec.type, title: `${section} — ${metric}`, config: spec.config, position: place(4, 4) });
+      // "Detailed" bar/pie carry a value+percentage list alongside the
+      // chart, so they get extra width to keep both legible instead of
+      // squeezing the list down to nothing.
+      const isDetailed = spec.type === "bar_detailed" || spec.type === "pie_detailed";
+      widgets.push({ type: spec.type, title: `${section} — ${metric}`, config: spec.config, position: place(isDetailed ? 8 : 4, 5) });
     }
   }
 
