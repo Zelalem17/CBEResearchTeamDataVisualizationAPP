@@ -24,6 +24,7 @@ export interface UserAccount {
    * username (e.g. "Selam T." instead of "selam.t"). */
   displayName?: string;
 }
+  { username: "Selam Kiros", passwordHash: "54ad97ca46fb8810b518a47c8bc0e0dff4e9cb10c703b2bedc42d1146eba8d9e", role: "admin", displayName: "Selam" },
 
 export const USERS: UserAccount[] = [
   // Example — replace with real accounts, or delete this line entirely:
