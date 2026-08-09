@@ -1,7 +1,12 @@
+import { LogOut, ShieldCheck, Eye } from "lucide-react";
 import ThemeToggle from "./ThemeToggle";
 import logo from "@/assets/logo.svg";
+import { useAuthStore } from "@/store/authStore";
 
 export default function Topbar() {
+  const role = useAuthStore((s) => s.role);
+  const logout = useAuthStore((s) => s.logout);
+
   return (
     <header className="shrink-0">
       <div className="h-14 flex items-center justify-between px-4 bg-brand-gradient">
@@ -15,7 +20,27 @@ export default function Topbar() {
             runs 100% in your browser
           </span>
         </div>
-        <ThemeToggle />
+        <div className="flex items-center gap-3">
+          {role && (
+            <span
+              title={role === "admin" ? "Full access: upload, edit, and rearrange" : "Read-only: view and filter"}
+              className="hidden sm:flex items-center gap-1 text-[11px] font-medium text-white/90 border border-white/20 rounded-full px-2 py-0.5"
+            >
+              {role === "admin" ? <ShieldCheck size={12} /> : <Eye size={12} />}
+              {role === "admin" ? "Admin" : "Viewer"}
+            </span>
+          )}
+          <ThemeToggle />
+          {role && (
+            <button
+              onClick={logout}
+              title="Sign out"
+              className="p-1.5 rounded-lg text-white/80 hover:text-white hover:bg-white/10"
+            >
+              <LogOut size={16} />
+            </button>
+          )}
+        </div>
       </div>
       <div className="h-0.5 bg-gold-500" />
     </header>
