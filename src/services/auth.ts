@@ -1,9 +1,9 @@
 /** Lightweight client-side access gate for this fully static app.
  *
- * READ THIS BEFORE RELYING ON IT: there is no backend, so the password
- * check below runs entirely in the visitor's browser against a hash
- * baked into the built JavaScript. Anyone who opens devtools can read
- * that hash, brute-force it offline, or simply patch the running app to
+ * READ THIS BEFORE RELYING ON IT: there is no backend, so every check
+ * below runs entirely in the visitor's browser against data baked into
+ * the built JavaScript. Anyone who opens devtools can read the stored
+ * hashes, brute-force them offline, or simply patch the running app to
  * skip the check. This is enough to keep casual visitors and search
  * engines out of a link you don't want indiscriminately shared — it is
  * NOT real security and should never guard anything sensitive. For
@@ -11,49 +11,79 @@
  * provider instead (Netlify Identity, Cloudflare Access, Auth0, Supabase
  * Auth all work with zero backend code of your own) — see README.md.
  *
- * Two roles are supported, each behind its own password:
- *   - "admin"  — full access: upload data, add/remove/rearrange widgets
- *   - "viewer" — read-only: can filter/drill into whatever the admin
- *                has published, but can't upload or edit the dashboard
+ * Two ways to sign in:
+ *   1. A named account from data/users.ts — one username + password per
+ *      researcher, each with their own role. This is what "admin gives
+ *      each researcher their own username and password" refers to.
+ *   2. A single break-glass master admin account (username "admin"),
+ *      configured via VITE_ADMIN_PASSWORD_HASH at build time — always
+ *      available so you can never be fully locked out even if
+ *      data/users.ts is empty or misconfigured.
+ *
+ * Adding/removing a user means editing data/users.ts and redeploying —
+ * there's no live backend to persist changes instantly for everyone
+ * else, same limitation as the rest of this app. See the "Manage users"
+ * panel (admin only, in the app) for a form that generates the exact
+ * line to paste into that file.
  */
+
+import { USERS } from "@/data/users";
 
 export type Role = "admin" | "viewer";
 
-const STORAGE_KEY = "bi-insights-auth-v1";
+export interface AuthedUser {
+  role: Role;
+  username: string;
+  displayName: string;
+}
 
-async function sha256Hex(text: string): Promise<string> {
+const STORAGE_KEY = "bi-insights-auth-v2";
+const MASTER_USERNAME = "admin";
+
+export async function sha256Hex(text: string): Promise<string> {
   const bytes = new TextEncoder().encode(text);
   const digest = await crypto.subtle.digest("SHA-256", bytes);
   return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-/** Hashes baked in at build time via Vite env vars (see .env.example).
- * Never put the plaintext password in source — only its SHA-256 hash,
- * generated with `npm run hash-password -- yourPassword`. */
-const ADMIN_HASH = (import.meta.env.VITE_ADMIN_PASSWORD_HASH as string | undefined)?.trim().toLowerCase();
-const VIEWER_HASH = (import.meta.env.VITE_VIEWER_PASSWORD_HASH as string | undefined)?.trim().toLowerCase();
+/** Break-glass master admin hash, baked in at build time (see
+ * .env.example). Optional — leave unset once data/users.ts has at least
+ * one admin account of its own. */
+const MASTER_ADMIN_HASH = (import.meta.env.VITE_ADMIN_PASSWORD_HASH as string | undefined)?.trim().toLowerCase();
 
-/** True when neither password hash has been configured — i.e. the app
- * was built without setting up access control at all. */
-export const isAuthConfigured = Boolean(ADMIN_HASH || VIEWER_HASH);
+export const isAuthConfigured = Boolean(MASTER_ADMIN_HASH) || USERS.length > 0;
 
-export async function checkPassword(password: string): Promise<Role | null> {
+export async function checkCredentials(username: string, password: string): Promise<AuthedUser | null> {
+  const uname = username.trim().toLowerCase();
+  if (!uname || !password) return null;
   const hash = await sha256Hex(password);
-  if (ADMIN_HASH && hash === ADMIN_HASH) return "admin";
-  if (VIEWER_HASH && hash === VIEWER_HASH) return "viewer";
+
+  if (MASTER_ADMIN_HASH && uname === MASTER_USERNAME && hash === MASTER_ADMIN_HASH) {
+    return { role: "admin", username: MASTER_USERNAME, displayName: "Admin" };
+  }
+
+  const user = USERS.find((u) => u.username.trim().toLowerCase() === uname);
+  if (user && hash === user.passwordHash.trim().toLowerCase()) {
+    return { role: user.role, username: user.username, displayName: user.displayName || user.username };
+  }
   return null;
 }
 
-export function saveSession(role: Role, remember: boolean) {
+export function saveSession(user: AuthedUser, remember: boolean) {
   const store = remember ? localStorage : sessionStorage;
-  store.setItem(STORAGE_KEY, role);
+  store.setItem(STORAGE_KEY, JSON.stringify(user));
 }
 
-export function loadSession(): Role | null {
-  const fromSession = sessionStorage.getItem(STORAGE_KEY);
-  const fromLocal = localStorage.getItem(STORAGE_KEY);
-  const val = fromSession ?? fromLocal;
-  return val === "admin" || val === "viewer" ? val : null;
+export function loadSession(): AuthedUser | null {
+  const raw = sessionStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(STORAGE_KEY);
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && (parsed.role === "admin" || parsed.role === "viewer") && typeof parsed.username === "string") {
+      return parsed as AuthedUser;
+    }
+  } catch { /* corrupt/old-format session — treat as logged out */ }
+  return null;
 }
 
 export function clearSession() {
