@@ -43,7 +43,7 @@ export default function LoginScreen() {
           </h1>
           <p className="text-brand-100 max-w-md text-sm sm:text-base leading-relaxed mb-8">
             Sign in to explore live dashboards, benchmark CBE against industry figures, and turn raw
-            research data into decisions — instantly.
+            research data into decisions instantly.
           </p>
           <div className="hidden sm:flex items-center gap-2 text-brand-100/80 text-xs">
             <ShieldCheck size={15} className="text-gold-300 shrink-0" />
