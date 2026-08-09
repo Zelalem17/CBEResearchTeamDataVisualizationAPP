@@ -48,9 +48,6 @@ export function groupAndAgg(rows: DataRow[], groupField: string, valueField?: st
 
 const baseTooltip = { trigger: "axis" as const, backgroundColor: "rgba(17,24,39,0.92)", borderWidth: 0, textStyle: { color: "#fff" } };
 const baseGrid = { left: 48, right: 24, top: 32, bottom: 40, containLabel: true };
-// Bar-family charts render a value/percent label above each bar, which
-// needs a bit more headroom above the plot area than the default grid.
-const barGrid = { ...baseGrid, top: 44 };
 
 /** Applies optional widget-level prefilters (config.filters: [{field,
  * value}]) before any aggregation. Lets a single dataset's rows be
@@ -78,29 +75,18 @@ function aggValues(vals: number[], agg: string): number {
 export function buildBarOption(rows: DataRow[], config: any) {
   const scoped = applyConfigFilters(rows, config);
   const data = groupAndAgg(scoped, config.x, config.y, config.agg ?? "sum").slice(0, 15);
-  const total = data.reduce((sum, d) => sum + d.value, 0) || 1;
   return {
     color: PALETTE,
     tooltip: baseTooltip,
-    grid: barGrid,
+    grid: baseGrid,
     xAxis: { type: "category", data: data.map((d) => d.key), axisLabel: { rotate: data.length > 6 ? 30 : 0 } },
     yAxis: { type: "value" },
     series: [{
       type: "bar",
       data: data.map((d) => ({
         value: d.value,
-        pct: (d.value / total) * 100,
         itemStyle: { borderRadius: [4, 4, 0, 0], ...cbeColorOverride(d.key) },
       })),
-      // Actual value + share-of-total printed right above each bar, so
-      // the number isn't only implied by bar height.
-      label: {
-        show: true,
-        position: "top",
-        fontSize: 10,
-        color: "#6b7280",
-        formatter: (p: any) => `${Number(p.data.value).toLocaleString()}\n${Number(p.data.pct).toFixed(1)}%`,
-      },
       barMaxWidth: 42,
     }],
   };
@@ -138,9 +124,7 @@ export function buildPieOption(rows: DataRow[], config: any) {
         itemStyle: cbeColorOverride(d.key),
       })),
       itemStyle: { borderRadius: 6, borderColor: "#fff", borderWidth: 2 },
-      // Name, actual value, and percent share — not just percent — so
-      // the real number is always visible on the slice itself too.
-      label: { formatter: "{b}\n{c} ({d}%)", fontSize: 11 },
+      label: { formatter: "{b}\n{d}%", fontSize: 11 },
     }],
   };
 }
@@ -318,42 +302,18 @@ export function buildGroupedBarOption(rows: DataRow[], config: any) {
   const xValues = Array.from(new Set(scoped.map((r) => String(r[xField] ?? "—")))).sort();
   const seriesValues = Array.from(new Set(scoped.map((r) => String(r[seriesField] ?? "—"))));
 
-  // Raw value matrix first, so we can compute each bar's share of its
-  // own x-group's total (e.g. CBE's % of CBE+Industry for that period)
-  // before building the per-series ECharts series objects.
-  const matrix = seriesValues.map((sv) =>
-    xValues.map((xv) => {
+  const series = seriesValues.map((sv, i) => {
+    const data = xValues.map((xv) => {
       const matching = scoped.filter((r) => String(r[xField] ?? "—") === xv && String(r[seriesField] ?? "—") === sv);
       const vals = matching.map((r) => Number(r[valueField])).filter(Number.isFinite);
       if (!vals.length) return null;
       return Math.round(aggValues(vals, agg) * 10000) / 10000;
-    })
-  );
-  const totalsByX = xValues.map((_, xi) =>
-    matrix.reduce((sum, seriesData) => sum + (seriesData[xi] ?? 0), 0) || 1
-  );
-
-  const series = seriesValues.map((sv, i) => {
-    const data = matrix[i].map((v, xi) => {
-      if (v === null) return null;
-      return { value: v, pct: (v / totalsByX[xi]) * 100 };
     });
-    const seriesColor = isCbeLabel(sv) ? CBE_GOLD : PALETTE[i % PALETTE.length];
     return {
       name: sv, type: "bar", data,
       itemStyle: {
         borderRadius: config.stacked ? [0, 0, 0, 0] : [4, 4, 0, 0],
-        color: seriesColor,
-      },
-      // Actual value + this series' share of that x-group's total,
-      // printed on the bar itself — e.g. CBE's number and its % of
-      // CBE+Industry for that period, right on the CBE bar.
-      label: {
-        show: true,
-        position: config.stacked ? "inside" : "top",
-        fontSize: 10,
-        color: config.stacked ? "#fff" : "#6b7280",
-        formatter: (p: any) => (p.data ? `${Number(p.data.value).toLocaleString()}\n${Number(p.data.pct).toFixed(1)}%` : ""),
+        color: isCbeLabel(sv) ? CBE_GOLD : PALETTE[i % PALETTE.length],
       },
       barMaxWidth: 28,
       ...(config.stacked ? { stack: "total" } : {}),
@@ -364,7 +324,7 @@ export function buildGroupedBarOption(rows: DataRow[], config: any) {
     color: PALETTE,
     tooltip: { ...baseTooltip, axisPointer: { type: "shadow" } },
     legend: { bottom: 0, textStyle: { fontSize: 11 } },
-    grid: { ...barGrid, bottom: 56 },
+    grid: { ...baseGrid, bottom: 56 },
     xAxis: { type: "category", data: xValues, axisLabel: { rotate: xValues.length > 6 ? 30 : 0 } },
     yAxis: { type: "value" },
     series,
@@ -412,6 +372,30 @@ export function buildGroupedLineOption(rows: DataRow[], config: any) {
   };
 }
 
+export function buildOptionForWidget(widget: Widget, rows: DataRow[]) {
+  switch (widget.type) {
+    case "bar": return buildBarOption(rows, widget.config);
+    // "Detailed" variants reuse the exact same chart option as their
+    // plain counterpart — the only difference is ChartRenderer also
+    // paints a value+percentage list alongside them (see
+    // getWidgetListData below).
+    case "bar_detailed": return buildBarOption(rows, widget.config);
+    case "grouped_bar": return buildGroupedBarOption(rows, widget.config);
+    case "grouped_line": return buildGroupedLineOption(rows, widget.config);
+    case "line": return buildLineOption(rows, widget.config, false);
+    case "area": return buildLineOption(rows, widget.config, true);
+    case "pie": return buildPieOption(rows, widget.config);
+    case "pie_detailed": return buildPieOption(rows, widget.config);
+    case "scatter": return buildScatterOption(rows, widget.config);
+    case "category_scatter": return buildCategoryScatterOption(rows, widget.config);
+    case "histogram": return buildHistogramOption(rows, widget.config);
+    case "heatmap": return buildHeatmapOption(rows, widget.config);
+    case "treemap": return buildTreemapOption(rows, widget.config);
+    case "gauge": return buildGaugeOption(rows, widget.config);
+    default: return {};
+  }
+}
+
 export interface WidgetListRow {
   key: string;
   value: number;
@@ -432,84 +416,4 @@ export function getWidgetListData(widget: Widget, rows: DataRow[]): WidgetListRo
   const capped = groupAndAgg(scoped, groupField, valueField, config.agg ?? "sum").slice(0, isPie ? 10 : 15);
   const total = capped.reduce((sum, d) => sum + d.value, 0) || 1;
   return capped.map((d) => ({ key: d.key, value: d.value, pct: (d.value / total) * 100 }));
-}
-
-/** Content-aware minimum grid size for a widget, given its *current*
- * (filtered) data — more categories, rotated x-axis labels, wrapped
- * legends, and on-bar value/percent labels all need more room than a
- * one-size-fits-all default grid box provides. DashboardGrid uses this
- * as a live `minW`/`minH` floor (and to bump the rendered size up to at
- * least this floor) so a chart is never silently clipped by too small a
- * tile — the person never has to find the resize handle and drag it out
- * by hand just to see the whole graph. Returns null for widget types
- * that don't need a data-driven minimum (kpi, table, gauge, ...). */
-export function computeAutoFitSize(widget: Widget, rows: DataRow[]): { w: number; h: number } | null {
-  const config = widget.config ?? {};
-  const scoped = applyConfigFilters(rows, config);
-
-  switch (widget.type) {
-    case "bar":
-    case "bar_detailed": {
-      if (!config.x) return null;
-      const n = groupAndAgg(scoped, config.x, config.y, config.agg ?? "sum").slice(0, 15).length;
-      let h = 5;
-      if (n > 6) h += 1; // rotated x-axis labels need more vertical room
-      if (n > 10) h += 1; // ...and on-bar value+% labels need a bit more still
-      let w = widget.type === "bar_detailed" ? 9 : 6;
-      if (n > 8) w = Math.min(12, w + 2);
-      return { w, h };
-    }
-    case "pie":
-    case "pie_detailed": {
-      if (!config.category) return null;
-      const n = groupAndAgg(scoped, config.category, config.value, config.agg ?? "sum").slice(0, 10).length;
-      const legendRows = Math.max(1, Math.ceil(n / 4));
-      const h = 5 + (legendRows - 1);
-      const w = widget.type === "pie_detailed" ? 9 : 5;
-      return { w, h };
-    }
-    case "grouped_bar":
-    case "grouped_line": {
-      if (!config.x || !config.seriesField) return null;
-      const xCount = new Set(scoped.map((r) => String(r[config.x] ?? "—"))).size;
-      const seriesCount = new Set(scoped.map((r) => String(r[config.seriesField] ?? "—"))).size;
-      let h = 5;
-      if (xCount > 6) h += 1;
-      if (xCount > 10) h += 1;
-      let w = 6;
-      const bars = xCount * seriesCount;
-      if (bars > 12) w = 8;
-      if (bars > 24) w = 10;
-      return { w, h };
-    }
-    case "heatmap":
-    case "treemap":
-      return { w: 6, h: 5 };
-    default:
-      return null;
-  }
-}
-
-export function buildOptionForWidget(widget: Widget, rows: DataRow[]) {
-  switch (widget.type) {
-    case "bar": return buildBarOption(rows, widget.config);
-    // "Detailed" variants reuse the exact same chart option as their
-    // plain counterpart — the only difference is ChartRenderer also
-    // paints a value+percentage list alongside them (see
-    // getWidgetListData above).
-    case "bar_detailed": return buildBarOption(rows, widget.config);
-    case "grouped_bar": return buildGroupedBarOption(rows, widget.config);
-    case "grouped_line": return buildGroupedLineOption(rows, widget.config);
-    case "line": return buildLineOption(rows, widget.config, false);
-    case "area": return buildLineOption(rows, widget.config, true);
-    case "pie": return buildPieOption(rows, widget.config);
-    case "pie_detailed": return buildPieOption(rows, widget.config);
-    case "scatter": return buildScatterOption(rows, widget.config);
-    case "category_scatter": return buildCategoryScatterOption(rows, widget.config);
-    case "histogram": return buildHistogramOption(rows, widget.config);
-    case "heatmap": return buildHeatmapOption(rows, widget.config);
-    case "treemap": return buildTreemapOption(rows, widget.config);
-    case "gauge": return buildGaugeOption(rows, widget.config);
-    default: return {};
-  }
 }
