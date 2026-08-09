@@ -23,7 +23,6 @@ export interface UserAccount {
   /** Optional friendly name shown in the top bar instead of the raw
    * username (e.g. "Selam T." instead of "selam.t"). */
   displayName?: string;
-}
   { username: "Selam Kiros", passwordHash: "54ad97ca46fb8810b518a47c8bc0e0dff4e9cb10c703b2bedc42d1146eba8d9e", role: "admin", displayName: "Selam" },
 
 export const USERS: UserAccount[] = [
@@ -31,3 +30,5 @@ export const USERS: UserAccount[] = [
   // { username: "selam", passwordHash: "…", role: "viewer", displayName: "Selam T." },
 ];
   { username: "Belay", passwordHash: "03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4", role: "viewer", displayName: "Belay" },
+}
+  
