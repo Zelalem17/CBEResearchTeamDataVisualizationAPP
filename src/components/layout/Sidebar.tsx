@@ -43,5 +43,5 @@ export default function Sidebar({ datasets, activeId, onSelect, onRemove }: Side
         {datasets.length === 0 && <p className="text-xs text-gray-400 px-2">No datasets yet</p>}
       </div>
     </aside>
-  );
+  ); 
 }
