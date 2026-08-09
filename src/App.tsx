@@ -30,8 +30,8 @@ export default function App() {
     tabs, activeDatasetId, addDataset, setActiveDataset, removeDataset,
     viewMode, setViewMode,
   } = useDashboardStore();
-  const role = useAuthStore((s) => s.role);
-  const isAdmin = role === "admin";
+  const user = useAuthStore((s) => s.user);
+  const isAdmin = user?.role === "admin";
 
   const [showUpload, setShowUpload] = useState(Object.keys(tabs).length === 0);
 
