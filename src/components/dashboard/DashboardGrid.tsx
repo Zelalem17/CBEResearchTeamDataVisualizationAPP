@@ -18,6 +18,10 @@ interface DashboardGridProps {
   datasetName: string;
   onWidgetsChange: (widgets: Widget[]) => void;
   onDrillDown: (field: string, value: string) => void;
+  /** false for viewer-role sessions: hides "Add widget", disables
+   * drag/resize, and hides the per-widget remove control. Export
+   * buttons stay available either way (read-only export is fine). */
+  editable?: boolean;
 }
 
 const GRID_COLS = 12;
@@ -30,7 +34,7 @@ const ResponsiveGridLayout = WidthProvider(GridLayout);
  * onWidgetsChange -> caller (DashboardPage) -> PUT /dashboards/{id}/layout.
  */
 export default function DashboardGrid({
-  widgets, rows, filters, searchTerm, columns, datasetName, onWidgetsChange, onDrillDown,
+  widgets, rows, filters, searchTerm, columns, datasetName, onWidgetsChange, onDrillDown, editable = true,
 }: DashboardGridProps) {
   const [showLibrary, setShowLibrary] = useState(false);
   const [exportingWord, setExportingWord] = useState(false);
@@ -50,13 +54,14 @@ export default function DashboardGrid({
 
   const handleLayoutChange = useCallback(
     (newLayout: Layout[]) => {
+      if (!editable) return;
       const updated = widgets.map((w) => {
         const l = newLayout.find((item) => item.i === w.id);
         return l ? { ...w, position: { x: l.x, y: l.y, w: l.w, h: l.h } } : w;
       });
       onWidgetsChange(updated);
     },
-    [widgets, onWidgetsChange]
+    [widgets, onWidgetsChange, editable]
   );
 
   const handleAddWidget = (widget: Omit<Widget, "id">) => {
@@ -93,9 +98,11 @@ export default function DashboardGrid({
       <div className="flex items-center justify-between">
         <span className="text-xs text-gray-500">{filteredRows.length.toLocaleString()} rows shown</span>
         <div className="flex items-center gap-2">
-          <button onClick={() => setShowLibrary(true)} className="btn-secondary flex items-center gap-1.5 text-sm">
-            <Plus size={15} /> Add widget
-          </button>
+          {editable && (
+            <button onClick={() => setShowLibrary(true)} className="btn-secondary flex items-center gap-1.5 text-sm">
+              <Plus size={15} /> Add widget
+            </button>
+          )}
           <button onClick={handleExportExcel} className="btn-secondary flex items-center gap-1.5 text-sm">
             <FileSpreadsheet size={15} /> Excel
           </button>
@@ -116,6 +123,9 @@ export default function DashboardGrid({
           rowHeight={ROW_HEIGHT}
           onLayoutChange={handleLayoutChange}
           draggableHandle=".widget-drag-handle"
+          cancel=".widget-toolbar"
+          isDraggable={editable}
+          isResizable={editable}
           compactType="vertical"
           margin={[12, 12]}
         >
@@ -124,7 +134,7 @@ export default function DashboardGrid({
               <WidgetCard
                 widget={widget}
                 rows={filteredRows}
-                onRemove={() => handleRemoveWidget(widget.id)}
+                onRemove={editable ? () => handleRemoveWidget(widget.id) : undefined}
                 onDrillDown={onDrillDown}
               />
             </div>
