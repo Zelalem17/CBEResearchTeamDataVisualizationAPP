@@ -9,7 +9,8 @@ import { exportNodeToPng } from "@/utils/exportUtils";
 interface WidgetCardProps {
   widget: Widget;
   rows: DataRow[];
-  onRemove: () => void;
+  /** Omit to hide the remove control (viewer-role / read-only sessions). */
+  onRemove?: () => void;
   onDrillDown?: (field: string, value: string) => void;
 }
 
@@ -24,18 +25,30 @@ export default function WidgetCard({ widget, rows, onRemove, onDrillDown }: Widg
 
   return (
     <div ref={nodeRef} data-widget-capture={widget.id} className="card h-full flex flex-col overflow-hidden group">
-      <div className="widget-drag-handle flex items-center justify-between px-3 py-2 border-b border-gray-100 dark:border-gray-800 cursor-move">
+      <div className={`widget-drag-handle flex items-center justify-between px-3 py-2 border-b border-gray-100 dark:border-gray-800 ${onRemove ? "cursor-move" : ""}`}>
         <div className="flex items-center gap-1.5 min-w-0">
-          <GripVertical size={14} className="text-gray-300 dark:text-gray-600 shrink-0" />
+          {onRemove && <GripVertical size={14} className="text-gray-300 dark:text-gray-600 shrink-0" />}
           <span className="text-sm font-semibold text-gray-800 dark:text-gray-100 truncate">{widget.title}</span>
         </div>
-        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-          <button onClick={handleExportPng} title="Export PNG" className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-400">
+        <div className="widget-toolbar flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button
+            onClick={handleExportPng}
+            onMouseDown={(e) => e.stopPropagation()}
+            title="Export PNG"
+            className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-400"
+          >
             <ImageIcon size={13} />
           </button>
-          <button onClick={onRemove} title="Remove widget" className="p-1 rounded hover:bg-rose-50 dark:hover:bg-rose-900/30 text-gray-400 hover:text-rose-500">
-            <X size={13} />
-          </button>
+          {onRemove && (
+            <button
+              onClick={onRemove}
+              onMouseDown={(e) => e.stopPropagation()}
+              title="Remove widget"
+              className="p-1 rounded hover:bg-rose-50 dark:hover:bg-rose-900/40 text-gray-400 hover:text-rose-500"
+            >
+              <X size={13} />
+            </button>
+          )}
         </div>
       </div>
       <div className="flex-1 p-2 min-h-0">
