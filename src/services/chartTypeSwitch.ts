@@ -13,9 +13,11 @@ import type { Widget, WidgetType } from "@/types";
  * and kpi/table (not charts) — those keep their original type. */
 export const SWITCHABLE_CHART_TYPES: { type: WidgetType; label: string }[] = [
   { type: "bar", label: "Bar" },
+  { type: "bar_detailed", label: "Bar (values + %)" },
   { type: "line", label: "Line" },
   { type: "area", label: "Area" },
   { type: "pie", label: "Pie" },
+  { type: "pie_detailed", label: "Pie (values + %)" },
   { type: "scatter", label: "Scatter" },
   { type: "histogram", label: "Histogram" },
   { type: "gauge", label: "Gauge" },
@@ -57,7 +59,8 @@ export function remapWidgetConfig(widget: Widget, newType: WidgetType): Widget {
   let config: Record<string, any>;
   switch (newType) {
     case "pie":
-      config = { category: xField, value: yField, agg, ...carryOver };
+    case "pie_detailed":
+      config = { category: xField, value: yField, agg, ...(newType === "pie_detailed" ? { listPosition: widget.config?.listPosition ?? "right" } : {}), ...carryOver };
       break;
     case "scatter":
       config = { x: xField, y: yField, ...carryOver };
@@ -74,6 +77,9 @@ export function remapWidgetConfig(widget: Widget, newType: WidgetType): Widget {
       break;
     case "gauge":
       config = { field: yField ?? xField, agg: agg === "sum" ? "avg" : agg, ...carryOver };
+      break;
+    case "bar_detailed":
+      config = { x: xField, y: yField, agg, listPosition: widget.config?.listPosition ?? "right", ...carryOver };
       break;
     case "bar":
     case "line":
