@@ -12,12 +12,16 @@ interface DatasetSectionProps {
    * to single-view for this dataset. Used in grid ("all datasets") mode;
    * omitted in single mode since the sidebar already shows the name. */
   showHeader?: boolean;
+  /** false for viewer-role sessions: hides "Add widget", drag/resize,
+   * per-widget remove, and the chart-type picker's write access — the
+   * dashboard renders read-only (filters/drill-down still work). */
+  editable?: boolean;
 }
 
 /** Renders one dataset's global filters + full drag-and-drop dashboard.
  * Shared by both view modes (single dataset / all datasets at once) so
  * the two modes never drift out of sync with each other. */
-export default function DatasetSection({ datasetId, showHeader }: DatasetSectionProps) {
+export default function DatasetSection({ datasetId, showHeader, editable = true }: DatasetSectionProps) {
   const tab = useDashboardStore((s) => s.tabs[datasetId]);
   const updateWidgets = useDashboardStore((s) => s.updateWidgets);
   const setFilters = useDashboardStore((s) => s.setFilters);
@@ -27,10 +31,6 @@ export default function DatasetSection({ datasetId, showHeader }: DatasetSection
   const [searchTerm, setSearchTerm] = useState("");
 
   const isPanel = useMemo(() => (tab ? isPanelSchema(tab.rows) : false), [tab]);
-  const sectionCount = useMemo(
-    () => (isPanel && tab ? new Set(tab.rows.map((r) => String(r.Section))).size : 0),
-    [isPanel, tab]
-  );
 
   if (!tab) return null;
 
@@ -60,20 +60,20 @@ export default function DatasetSection({ datasetId, showHeader }: DatasetSection
         </div>
       )}
 
-      {isPanel && (
-        <ChartTypePicker
-          value={tab.panelChartKind ?? defaultPanelChartKind(tab.rows)}
-          onChange={(kind) => setPanelChartKind(datasetId, kind)}
-          sectionCount={sectionCount}
-        />
-      )}
-
       <GlobalFilters
         columns={tab.dataset.columns}
         filters={tab.filters}
         onChange={(f) => setFilters(datasetId, f)}
         searchTerm={searchTerm}
         onSearchChange={setSearchTerm}
+        rightSlot={
+          isPanel && editable ? (
+            <ChartTypePicker
+              value={tab.panelChartKind ?? defaultPanelChartKind(tab.rows)}
+              onChange={(kind) => setPanelChartKind(datasetId, kind)}
+            />
+          ) : undefined
+        }
       />
 
       <DashboardGrid
@@ -85,6 +85,7 @@ export default function DatasetSection({ datasetId, showHeader }: DatasetSection
         datasetName={tab.dataset.name}
         onWidgetsChange={(w) => updateWidgets(datasetId, w)}
         onDrillDown={handleDrillDown}
+        editable={editable}
       />
     </section>
   );
