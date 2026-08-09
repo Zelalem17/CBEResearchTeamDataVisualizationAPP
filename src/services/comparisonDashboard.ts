@@ -47,10 +47,12 @@ function firstMetaField(rows: DataRow[]): { periodField: string | null; hasPerio
   return { periodField, hasPeriod, xField };
 }
 
-/** Sensible starting kind: a trend line when data spans periods, a bar
- * chart when it doesn't (nothing to trend against). */
-export function defaultPanelChartKind(rows: DataRow[]): PanelChartKind {
-  return firstMetaField(rows).hasPeriod ? "grouped_line" : "grouped_bar";
+/** Starting kind for every panel dashboard: always a bar chart. Bar is
+ * the most legible default for a side-by-side comparison at a glance;
+ * the picker next to the filter bar lets the user switch to line, area,
+ * pie, scatter, or histogram whenever they want a different view. */
+export function defaultPanelChartKind(_rows: DataRow[]): PanelChartKind {
+  return "grouped_bar";
 }
 
 /** Builds the {type, config} pair for one Section/Metric comparison
