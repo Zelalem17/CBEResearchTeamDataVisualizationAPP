@@ -2,8 +2,9 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import type { Dataset, Widget, FilterRule, DataRow } from "@/types";
 import { retypeComparisonWidgets, type PanelChartKind } from "@/services/comparisonDashboard";
+import type { PublishedBundle } from "@/services/publish";
 
-interface DatasetTab {
+export interface DatasetTab {
   dataset: Dataset;
   widgets: Widget[];
   rows: DataRow[];
@@ -21,6 +22,11 @@ interface DashboardState {
    * time). "grid" = every imported dataset's full dashboard stacked on
    * one page, so you can see e.g. four datasets simultaneously. */
   viewMode: "single" | "grid";
+  /** Timestamp of the published.json this browser last loaded, if any
+   * — shown as a small "Published <date>" indicator so viewers know
+   * they're looking at the admin's published data, not a stale local
+   * upload. Null until loadPublishedBundle runs at least once. */
+  publishedAt: string | null;
 
   addDataset: (dataset: Dataset, widgets: Widget[], rows: DataRow[], panelChartKind?: PanelChartKind) => void;
   setActiveDataset: (datasetId: string) => void;
@@ -37,6 +43,13 @@ interface DashboardState {
   setPanelChartKind: (datasetId: string, kind: PanelChartKind) => void;
 
   setFilters: (datasetId: string, filters: FilterRule[]) => void;
+
+  /** Loads a published.json bundle (see services/publish.ts) — used on
+   * a fresh browser with no local data so every visitor sees the same
+   * admin-curated dashboard automatically, no upload needed on their
+   * end. Existing local tabs always win on an id collision, so this
+   * never clobbers work already in progress in this browser. */
+  loadPublishedBundle: (bundle: PublishedBundle) => void;
 }
 
 // Wraps localStorage so a quota-exceeded error (large datasets can easily
@@ -61,6 +74,7 @@ export const useDashboardStore = create<DashboardState>()(
       tabs: {},
       activeDatasetId: null,
       viewMode: "single",
+      publishedAt: null,
 
       setViewMode: (mode) => set({ viewMode: mode }),
 
@@ -119,9 +133,26 @@ export const useDashboardStore = create<DashboardState>()(
         set((state) => ({
           tabs: { ...state.tabs, [datasetId]: { ...state.tabs[datasetId], filters } },
         })),
+
+      loadPublishedBundle: (bundle) =>
+        set((state) => {
+          // Local tabs win on id collision — never overwrite work someone
+          // already has open in this browser with the published version.
+          const mergedTabs = { ...bundle.tabs, ...state.tabs };
+          const firstPublishedId = Object.keys(bundle.tabs)[0] ?? null;
+          return {
+            tabs: mergedTabs,
+            activeDatasetId: state.activeDatasetId ?? firstPublishedId,
+            publishedAt: bundle.publishedAt,
+          };
+        }),
     }),
     {
-      name: "bi-insights-dashboard-v1",
+      // Bump this whenever a stored-widget shape changes (like adding
+      // `config.comparisonKey` for the chart-type picker) — a version
+      // bump makes old localStorage silently ignored instead of loading
+      // stale widgets that new code can't recognize.
+      name: "bi-insights-dashboard-v2",
       storage: safeStorage,
       // Cap what's persisted: keep only the first 2,000 rows per dataset in
       // localStorage so a large import doesn't blow the ~5MB quota. The full
@@ -129,6 +160,7 @@ export const useDashboardStore = create<DashboardState>()(
       partialize: (state) => ({
         activeDatasetId: state.activeDatasetId,
         viewMode: state.viewMode,
+        publishedAt: state.publishedAt,
         tabs: Object.fromEntries(
           Object.entries(state.tabs).map(([id, tab]) => [id, { ...tab, rows: tab.rows.slice(0, 2000) }])
         ),
