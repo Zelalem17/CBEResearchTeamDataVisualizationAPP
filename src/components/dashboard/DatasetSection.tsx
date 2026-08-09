@@ -31,6 +31,10 @@ export default function DatasetSection({ datasetId, showHeader, editable = true 
   const [searchTerm, setSearchTerm] = useState("");
 
   const isPanel = useMemo(() => (tab ? isPanelSchema(tab.rows) : false), [tab]);
+  const sectionCount = useMemo(
+    () => (isPanel && tab ? new Set(tab.rows.map((r) => String(r.Section))).size : 0),
+    [isPanel, tab]
+  );
 
   if (!tab) return null;
 
@@ -60,20 +64,20 @@ export default function DatasetSection({ datasetId, showHeader, editable = true 
         </div>
       )}
 
+      {isPanel && editable && (
+        <ChartTypePicker
+          value={tab.panelChartKind ?? defaultPanelChartKind(tab.rows)}
+          onChange={(kind) => setPanelChartKind(datasetId, kind)}
+          sectionCount={sectionCount}
+        />
+      )}
+
       <GlobalFilters
         columns={tab.dataset.columns}
         filters={tab.filters}
         onChange={(f) => setFilters(datasetId, f)}
         searchTerm={searchTerm}
         onSearchChange={setSearchTerm}
-        rightSlot={
-          isPanel && editable ? (
-            <ChartTypePicker
-              value={tab.panelChartKind ?? defaultPanelChartKind(tab.rows)}
-              onChange={(kind) => setPanelChartKind(datasetId, kind)}
-            />
-          ) : undefined
-        }
       />
 
       <DashboardGrid
