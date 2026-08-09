@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { X, BarChart3, LineChart, PieChart, ScatterChart, AreaChart, Gauge, Grid3x3, Table2, Activity, TrendingUp } from "lucide-react";
+import { X, BarChart3, LineChart, PieChart, ScatterChart, AreaChart, Gauge, Grid3x3, Table2, Activity, TrendingUp, ListOrdered } from "lucide-react";
 import type { ColumnProfile, Widget, WidgetType } from "@/types";
 
 interface WidgetLibraryModalProps {
@@ -11,11 +11,13 @@ interface WidgetLibraryModalProps {
 const WIDGET_TYPES: { type: WidgetType; label: string; icon: any }[] = [
   { type: "kpi", label: "KPI Card", icon: TrendingUp },
   { type: "bar", label: "Bar chart", icon: BarChart3 },
+  { type: "bar_detailed", label: "Bar chart (values + %)", icon: ListOrdered },
   { type: "grouped_bar", label: "Grouped bar (compare)", icon: BarChart3 },
   { type: "line", label: "Line chart", icon: LineChart },
   { type: "grouped_line", label: "Grouped line (compare)", icon: LineChart },
   { type: "area", label: "Area chart", icon: Activity },
   { type: "pie", label: "Pie chart", icon: PieChart },
+  { type: "pie_detailed", label: "Pie chart (values + %)", icon: ListOrdered },
   { type: "scatter", label: "Scatter plot", icon: ScatterChart },
   { type: "category_scatter", label: "Scatter (compare A vs B)", icon: ScatterChart },
   { type: "histogram", label: "Histogram", icon: AreaChart },
@@ -25,11 +27,17 @@ const WIDGET_TYPES: { type: WidgetType; label: string; icon: any }[] = [
   { type: "table", label: "Data table", icon: Table2 },
 ];
 
+// Sized generously enough that the chart renders at (close to) its
+// natural size out of the box, rather than defaulting to a cramped box
+// the user has to manually drag larger just to read labels/legends —
+// widgets can still be resized or expanded to fullscreen (the expand
+// icon on each widget card) at any time.
 const DEFAULT_SIZE: Record<WidgetType, { w: number; h: number }> = {
-  kpi: { w: 3, h: 2 }, bar: { w: 6, h: 4 }, line: { w: 6, h: 4 }, area: { w: 6, h: 4 },
-  pie: { w: 4, h: 4 }, scatter: { w: 6, h: 4 }, histogram: { w: 4, h: 4 },
-  heatmap: { w: 6, h: 4 }, treemap: { w: 6, h: 5 }, gauge: { w: 3, h: 3 }, table: { w: 12, h: 6 },
-  grouped_bar: { w: 6, h: 4 }, grouped_line: { w: 6, h: 4 }, category_scatter: { w: 6, h: 4 },
+  kpi: { w: 3, h: 2 }, bar: { w: 6, h: 5 }, line: { w: 6, h: 5 }, area: { w: 6, h: 5 },
+  pie: { w: 5, h: 5 }, scatter: { w: 6, h: 5 }, histogram: { w: 5, h: 5 },
+  heatmap: { w: 6, h: 5 }, treemap: { w: 6, h: 5 }, gauge: { w: 3, h: 3 }, table: { w: 12, h: 6 },
+  grouped_bar: { w: 6, h: 5 }, grouped_line: { w: 6, h: 5 }, category_scatter: { w: 6, h: 5 },
+  bar_detailed: { w: 9, h: 5 }, pie_detailed: { w: 9, h: 5 },
 };
 
 /** Modal used to add a new widget to the dashboard: pick a chart type,
@@ -52,6 +60,8 @@ export default function WidgetLibraryModal({ columns, onAdd, onClose }: WidgetLi
     switch (selected) {
       case "kpi": widget = { ...base, title: `Total ${fieldB}`, config: { field: fieldB, agg: "sum" } }; break;
       case "pie": widget = { ...base, title: `${fieldB} by ${fieldA}`, config: { category: fieldA, value: fieldB, agg: "sum" } }; break;
+      case "pie_detailed": widget = { ...base, title: `${fieldB} by ${fieldA}`, config: { category: fieldA, value: fieldB, agg: "sum", listPosition: "right" } }; break;
+      case "bar_detailed": widget = { ...base, title: `${fieldB} by ${fieldA}`, config: { x: fieldA, y: fieldB, agg: "sum", listPosition: "right" } }; break;
       case "scatter": widget = { ...base, title: `${fieldA} vs ${fieldB}`, config: { x: fieldA, y: fieldB } }; break;
       case "histogram": widget = { ...base, title: `Distribution of ${fieldB}`, config: { field: fieldB, bins: 20 } }; break;
       case "heatmap": widget = { ...base, title: "Correlation matrix", config: { fields: measures.map((m) => m.name) } }; break;
