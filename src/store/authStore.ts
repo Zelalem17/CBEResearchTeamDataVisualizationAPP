@@ -1,33 +1,33 @@
 import { create } from "zustand";
-import { checkPassword, saveSession, loadSession, clearSession, type Role } from "@/services/auth";
+import { checkCredentials, saveSession, loadSession, clearSession, type AuthedUser } from "@/services/auth";
 
 interface AuthState {
-  role: Role | null;
+  user: AuthedUser | null;
   error: string | null;
   loading: boolean;
-  login: (password: string, remember: boolean) => Promise<boolean>;
+  login: (username: string, password: string, remember: boolean) => Promise<boolean>;
   logout: () => void;
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
-  role: loadSession(),
+  user: loadSession(),
   error: null,
   loading: false,
 
-  login: async (password, remember) => {
+  login: async (username, password, remember) => {
     set({ loading: true, error: null });
-    const role = await checkPassword(password);
-    if (role) {
-      saveSession(role, remember);
-      set({ role, loading: false, error: null });
+    const user = await checkCredentials(username, password);
+    if (user) {
+      saveSession(user, remember);
+      set({ user, loading: false, error: null });
       return true;
     }
-    set({ loading: false, error: "Incorrect password." });
+    set({ loading: false, error: "Incorrect username or password." });
     return false;
   },
 
   logout: () => {
     clearSession();
-    set({ role: null });
+    set({ user: null });
   },
 }));
