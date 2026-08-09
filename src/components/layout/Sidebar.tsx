@@ -5,7 +5,8 @@ interface SidebarProps {
   datasets: Dataset[];
   activeId: string | null;
   onSelect: (id: string) => void;
-  onRemove: (id: string) => void;
+  /** Omit to hide the remove control (e.g. for viewer-role sessions). */
+  onRemove?: (id: string) => void;
 }
 
 /** Lists every dataset imported into the current project, each rendered
@@ -29,12 +30,14 @@ export default function Sidebar({ datasets, activeId, onSelect, onRemove }: Side
               <p className="truncate">{d.name}</p>
               <p className="text-[11px] text-gray-400">{d.row_count.toLocaleString()} rows</p>
             </div>
-            <button
-              onClick={(e) => { e.stopPropagation(); onRemove(d.dataset_id); }}
-              className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-rose-100 dark:hover:bg-rose-900/40 text-gray-400 hover:text-rose-500 shrink-0"
-            >
-              <X size={12} />
-            </button>
+            {onRemove && (
+              <button
+                onClick={(e) => { e.stopPropagation(); onRemove(d.dataset_id); }}
+                className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-rose-100 dark:hover:bg-rose-900/40 text-gray-400 hover:text-rose-500 shrink-0"
+              >
+                <X size={12} />
+              </button>
+            )}
           </div>
         ))}
         {datasets.length === 0 && <p className="text-xs text-gray-400 px-2">No datasets yet</p>}
