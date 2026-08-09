@@ -7,7 +7,24 @@ import type { DataRow, Widget } from "@/types";
 
 const PALETTE = ["#6366f1", "#22c55e", "#f97316", "#06b6d4", "#e11d48", "#a855f7", "#eab308", "#64748b"];
 
-function groupAndAgg(rows: DataRow[], groupField: string, valueField?: string, agg: string = "sum") {
+// This app is for the Commercial Bank of Ethiopia — whenever a bar,
+// slice, or series is literally labelled "CBE" (as opposed to e.g. an
+// "Industry" comparison category), it should always render in CBE's
+// brand gold rather than whatever color the palette would otherwise
+// assign it, so CBE's own figures are instantly identifiable on every
+// chart. Matches the same gold used in the Word/PDF export branding.
+const CBE_GOLD = "#F2A900";
+export function isCbeLabel(label: string): boolean {
+  return /cbe/i.test(label);
+}
+/** Returns an itemStyle color override for CBE-labelled data/series,
+ * or undefined so the caller's own default (palette / series index)
+ * applies untouched. */
+function cbeColorOverride(label: string): { color: string } | undefined {
+  return isCbeLabel(label) ? { color: CBE_GOLD } : undefined;
+}
+
+export function groupAndAgg(rows: DataRow[], groupField: string, valueField?: string, agg: string = "sum") {
   const groups = new Map<string, number[]>();
   for (const row of rows) {
     const key = String(row[groupField] ?? "—");
@@ -64,7 +81,14 @@ export function buildBarOption(rows: DataRow[], config: any) {
     grid: baseGrid,
     xAxis: { type: "category", data: data.map((d) => d.key), axisLabel: { rotate: data.length > 6 ? 30 : 0 } },
     yAxis: { type: "value" },
-    series: [{ type: "bar", data: data.map((d) => d.value), itemStyle: { borderRadius: [4, 4, 0, 0] }, barMaxWidth: 42 }],
+    series: [{
+      type: "bar",
+      data: data.map((d) => ({
+        value: d.value,
+        itemStyle: { borderRadius: [4, 4, 0, 0], ...cbeColorOverride(d.key) },
+      })),
+      barMaxWidth: 42,
+    }],
   };
 }
 
@@ -94,7 +118,11 @@ export function buildPieOption(rows: DataRow[], config: any) {
     legend: { bottom: 0, textStyle: { fontSize: 11 } },
     series: [{
       type: "pie", radius: ["42%", "72%"], center: ["50%", "45%"],
-      data: data.map((d) => ({ name: d.key, value: d.value })),
+      data: data.map((d) => ({
+        name: d.key,
+        value: d.value,
+        itemStyle: cbeColorOverride(d.key),
+      })),
       itemStyle: { borderRadius: 6, borderColor: "#fff", borderWidth: 2 },
       label: { formatter: "{b}\n{d}%", fontSize: 11 },
     }],
@@ -283,7 +311,10 @@ export function buildGroupedBarOption(rows: DataRow[], config: any) {
     });
     return {
       name: sv, type: "bar", data,
-      itemStyle: { borderRadius: config.stacked ? [0, 0, 0, 0] : [4, 4, 0, 0], color: PALETTE[i % PALETTE.length] },
+      itemStyle: {
+        borderRadius: config.stacked ? [0, 0, 0, 0] : [4, 4, 0, 0],
+        color: isCbeLabel(sv) ? CBE_GOLD : PALETTE[i % PALETTE.length],
+      },
       barMaxWidth: 28,
       ...(config.stacked ? { stack: "total" } : {}),
     };
@@ -320,12 +351,13 @@ export function buildGroupedLineOption(rows: DataRow[], config: any) {
       if (!vals.length) return null;
       return Math.round(aggValues(vals, agg) * 10000) / 10000;
     });
+    const seriesColor = isCbeLabel(sv) ? CBE_GOLD : PALETTE[i % PALETTE.length];
     return {
       name: sv, type: "line", data, smooth: true, symbol: "circle", symbolSize: 6,
-      lineStyle: { width: 2.5, color: PALETTE[i % PALETTE.length] },
-      itemStyle: { color: PALETTE[i % PALETTE.length] },
+      lineStyle: { width: 2.5, color: seriesColor },
+      itemStyle: { color: seriesColor },
       connectNulls: true,
-      ...(config.area ? { areaStyle: { opacity: 0.18, color: PALETTE[i % PALETTE.length] } } : {}),
+      ...(config.area ? { areaStyle: { opacity: 0.18, color: seriesColor } } : {}),
     };
   });
 
@@ -343,11 +375,17 @@ export function buildGroupedLineOption(rows: DataRow[], config: any) {
 export function buildOptionForWidget(widget: Widget, rows: DataRow[]) {
   switch (widget.type) {
     case "bar": return buildBarOption(rows, widget.config);
+    // "Detailed" variants reuse the exact same chart option as their
+    // plain counterpart — the only difference is ChartRenderer also
+    // paints a value+percentage list alongside them (see
+    // getWidgetListData below).
+    case "bar_detailed": return buildBarOption(rows, widget.config);
     case "grouped_bar": return buildGroupedBarOption(rows, widget.config);
     case "grouped_line": return buildGroupedLineOption(rows, widget.config);
     case "line": return buildLineOption(rows, widget.config, false);
     case "area": return buildLineOption(rows, widget.config, true);
     case "pie": return buildPieOption(rows, widget.config);
+    case "pie_detailed": return buildPieOption(rows, widget.config);
     case "scatter": return buildScatterOption(rows, widget.config);
     case "category_scatter": return buildCategoryScatterOption(rows, widget.config);
     case "histogram": return buildHistogramOption(rows, widget.config);
@@ -356,4 +394,26 @@ export function buildOptionForWidget(widget: Widget, rows: DataRow[]) {
     case "gauge": return buildGaugeOption(rows, widget.config);
     default: return {};
   }
+}
+
+export interface WidgetListRow {
+  key: string;
+  value: number;
+  pct: number;
+}
+
+/** Backing data for the "detailed" bar/pie variants' side list: the same
+ * grouped/aggregated rows the chart itself renders (same field mapping,
+ * same top-N cap), each annotated with its share of the total so the
+ * list's percentages always match what the chart shows. */
+export function getWidgetListData(widget: Widget, rows: DataRow[]): WidgetListRow[] {
+  const config = widget.config ?? {};
+  const scoped = applyConfigFilters(rows, config);
+  const isPie = widget.type === "pie_detailed";
+  const groupField = isPie ? config.category : config.x;
+  const valueField = isPie ? config.value : config.y;
+  if (!groupField) return [];
+  const capped = groupAndAgg(scoped, groupField, valueField, config.agg ?? "sum").slice(0, isPie ? 10 : 15);
+  const total = capped.reduce((sum, d) => sum + d.value, 0) || 1;
+  return capped.map((d) => ({ key: d.key, value: d.value, pct: (d.value / total) * 100 }));
 }
