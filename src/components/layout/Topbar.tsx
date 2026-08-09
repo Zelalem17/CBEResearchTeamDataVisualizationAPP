@@ -1,11 +1,15 @@
-import { LogOut, ShieldCheck, Eye } from "lucide-react";
+import { useState } from "react";
+import { LogOut, ShieldCheck, Eye, Users } from "lucide-react";
 import ThemeToggle from "./ThemeToggle";
 import logo from "@/assets/logo.svg";
 import { useAuthStore } from "@/store/authStore";
+import UserManagementPanel from "@/components/auth/UserManagementPanel";
 
 export default function Topbar() {
-  const role = useAuthStore((s) => s.role);
+  const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
+  const [showUsers, setShowUsers] = useState(false);
+  const isAdmin = user?.role === "admin";
 
   return (
     <header className="shrink-0">
@@ -21,17 +25,26 @@ export default function Topbar() {
           </span>
         </div>
         <div className="flex items-center gap-3">
-          {role && (
+          {user && (
             <span
-              title={role === "admin" ? "Full access: upload, edit, and rearrange" : "Read-only: view and filter"}
+              title={user.role === "admin" ? "Full access: upload, edit, and rearrange" : "Read-only: view and filter"}
               className="hidden sm:flex items-center gap-1 text-[11px] font-medium text-white/90 border border-white/20 rounded-full px-2 py-0.5"
             >
-              {role === "admin" ? <ShieldCheck size={12} /> : <Eye size={12} />}
-              {role === "admin" ? "Admin" : "Viewer"}
+              {user.role === "admin" ? <ShieldCheck size={12} /> : <Eye size={12} />}
+              {user.displayName}
             </span>
           )}
+          {isAdmin && (
+            <button
+              onClick={() => setShowUsers(true)}
+              title="Manage users"
+              className="p-1.5 rounded-lg text-white/80 hover:text-white hover:bg-white/10"
+            >
+              <Users size={16} />
+            </button>
+          )}
           <ThemeToggle />
-          {role && (
+          {user && (
             <button
               onClick={logout}
               title="Sign out"
@@ -43,6 +56,7 @@ export default function Topbar() {
         </div>
       </div>
       <div className="h-0.5 bg-gold-500" />
+      {showUsers && <UserManagementPanel onClose={() => setShowUsers(false)} />}
     </header>
   );
 }
