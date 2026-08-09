@@ -49,7 +49,11 @@ async function screenshotNode(node: HTMLElement): Promise<{ buffer: ArrayBuffer;
   await ensureFontsReady();
   const canvas = await html2canvas(node, {
     backgroundColor: getComputedStyle(document.body).backgroundColor || "#ffffff",
-    scale: 2,
+    // 3x device-pixel density (previously 2x) — the difference between
+    // "readable at a glance" and "blurry once placed into a Word/PDF
+    // page" for chart labels, axis numbers, and legends specifically,
+    // since those get shrunk down again once embedded in the document.
+    scale: 3,
     useCORS: true,
   });
   const dataUrl = canvas.toDataURL("image/png");
@@ -63,7 +67,7 @@ export async function exportNodeToPng(node: HTMLElement, filename: string) {
   await ensureFontsReady();
   const canvas = await html2canvas(node, {
     backgroundColor: getComputedStyle(document.body).backgroundColor || "#ffffff",
-    scale: 2,
+    scale: 3,
     useCORS: true,
   });
   const link = document.createElement("a");
@@ -80,12 +84,15 @@ export async function exportNodeToPdf(node: HTMLElement, filename: string, title
   await ensureFontsReady();
   const canvas = await html2canvas(node, {
     backgroundColor: getComputedStyle(document.body).backgroundColor || "#ffffff",
-    scale: 2,
+    scale: 3,
     useCORS: true,
   });
 
   const imgData = canvas.toDataURL("image/png");
-  const pdf = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
+  // "NONE" keeps the PNG's full pixel data — jsPDF's own default
+  // compression on addImage was softening fine chart lines/labels
+  // slightly at this higher scale.
+  const pdf = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4", compress: false });
   const pageWidth = pdf.internal.pageSize.getWidth();
   const pageHeight = pdf.internal.pageSize.getHeight();
 
@@ -100,28 +107,35 @@ export async function exportNodeToPdf(node: HTMLElement, filename: string, title
     pdf.setFont("helvetica", "bold");
     pdf.setFontSize(18);
     pdf.setTextColor(...BRAND_PURPLE_RGB);
-    pdf.text(title, 24, 34);
+    // Wrap instead of letting a long dataset name run off the page edge
+    // (or under the export button chrome that used to sit there) — this
+    // is what was reading as "header text not fully visible" in PDF
+    // exports.
+    const titleLines = pdf.splitTextToSize(title, pageWidth - 48);
+    pdf.text(titleLines, 24, 34);
+    const titleBlockHeight = titleLines.length * 20;
 
     pdf.setFont("helvetica", "normal");
     pdf.setFontSize(9);
     pdf.setTextColor(120, 120, 120);
-    pdf.text(`Exported ${new Date().toLocaleString()}`, 24, 48);
+    pdf.text(`Exported ${new Date().toLocaleString()}`, 24, 34 + titleBlockHeight - 6);
 
     // Thin gold accent rule under the title block, echoing the site's header.
     pdf.setDrawColor(...BRAND_GOLD_RGB);
     pdf.setLineWidth(1.5);
-    pdf.line(24, 56, pageWidth - 24, 56);
+    const ruleY = 34 + titleBlockHeight + 4;
+    pdf.line(24, ruleY, pageWidth - 24, ruleY);
 
-    position = 68;
+    position = ruleY + 12;
   }
 
-  pdf.addImage(imgData, "PNG", 20, position, renderWidth, renderHeight);
+  pdf.addImage(imgData, "PNG", 20, position, renderWidth, renderHeight, undefined, "NONE");
   heightLeft -= pageHeight - position;
 
   while (heightLeft > 0) {
     pdf.addPage();
     position = heightLeft - renderHeight + 20;
-    pdf.addImage(imgData, "PNG", 20, position, renderWidth, renderHeight);
+    pdf.addImage(imgData, "PNG", 20, position, renderWidth, renderHeight, undefined, "NONE");
     heightLeft -= pageHeight;
   }
 
