@@ -30,3 +30,4 @@ export const USERS: UserAccount[] = [
   // Example — replace with real accounts, or delete this line entirely:
   // { username: "selam", passwordHash: "…", role: "viewer", displayName: "Selam T." },
 ];
+  { username: "Belay", passwordHash: "03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4", role: "viewer", displayName: "Belay" },
