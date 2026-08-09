@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Filter, Search, X, Plus } from "lucide-react";
 import type { ColumnProfile, FilterRule } from "@/types";
 
@@ -8,12 +8,16 @@ interface GlobalFiltersProps {
   onChange: (filters: FilterRule[]) => void;
   searchTerm: string;
   onSearchChange: (term: string) => void;
+  /** Extra control rendered at the end of this same bar (e.g. the
+   * chart-type picker) — pushed to the right on wide screens, wraps
+   * onto its own line on narrow ones, same as everything else here. */
+  rightSlot?: ReactNode;
 }
 
 /** Global filter bar: free-text search across all columns, plus structured
  * filter chips (field + operator + value) that apply to every widget on
  * the active dashboard tab. */
-export default function GlobalFilters({ columns, filters, onChange, searchTerm, onSearchChange }: GlobalFiltersProps) {
+export default function GlobalFilters({ columns, filters, onChange, searchTerm, onSearchChange, rightSlot }: GlobalFiltersProps) {
   const [showAdd, setShowAdd] = useState(false);
   const [draftField, setDraftField] = useState(columns[0]?.name ?? "");
 
@@ -93,6 +97,13 @@ export default function GlobalFilters({ columns, filters, onChange, searchTerm, 
         >
           <Plus size={13} /> Add filter
         </button>
+      )}
+
+      {rightSlot && (
+        <>
+          <div className="hidden sm:block ml-auto h-6 w-px bg-gray-200 dark:bg-gray-700" />
+          <div className="flex items-center">{rightSlot}</div>
+        </>
       )}
     </div>
   );
