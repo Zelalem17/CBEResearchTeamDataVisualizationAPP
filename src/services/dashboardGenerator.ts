@@ -38,7 +38,7 @@ export function generateWidgets(columns: ColumnProfile[], relationships: Relatio
   if (dts.length && meas.length) {
     const dateCol = dts[0].name;
     for (const m of meas.slice(0, 2)) {
-      widgets.push({ type: "line", title: `${m.name} over time`, config: { x: dateCol, y: m.name, agg: "sum" }, position: place(6, 4) });
+      widgets.push({ type: "line", title: `${m.name} over time`, config: { x: dateCol, y: m.name, agg: "sum" }, position: place(6, 5) });
     }
   }
 
@@ -46,27 +46,27 @@ export function generateWidgets(columns: ColumnProfile[], relationships: Relatio
   if (dims.length && meas.length) {
     const primary = meas[0].name;
     for (const d of dims.slice(0, 3)) {
-      widgets.push({ type: "bar", title: `${primary} by ${d.name}`, config: { x: d.name, y: primary, agg: "sum" }, position: place(6, 4) });
+      widgets.push({ type: "bar", title: `${primary} by ${d.name}`, config: { x: d.name, y: primary, agg: "sum" }, position: place(6, 5) });
     }
     const smallest = dims.reduce((a, b) => (a.distinct_count <= b.distinct_count ? a : b));
-    widgets.push({ type: "pie", title: `Share of ${primary} by ${smallest.name}`, config: { category: smallest.name, value: primary, agg: "sum" }, position: place(4, 4) });
+    widgets.push({ type: "pie", title: `Share of ${primary} by ${smallest.name}`, config: { category: smallest.name, value: primary, agg: "sum" }, position: place(5, 5) });
   }
 
   // 4. Distribution
   for (const m of meas.slice(0, 2)) {
-    widgets.push({ type: "histogram", title: `Distribution of ${m.name}`, config: { field: m.name, bins: 20 }, position: place(4, 4) });
+    widgets.push({ type: "histogram", title: `Distribution of ${m.name}`, config: { field: m.name, bins: 20 }, position: place(5, 5) });
   }
 
   // 5. Comparison (top correlation)
   const corrRels = relationships.filter((r) => r.kind === "correlation");
   if (corrRels.length) {
     const top = corrRels.reduce((a, b) => (Math.abs(a.strength) >= Math.abs(b.strength) ? a : b));
-    widgets.push({ type: "scatter", title: `${top.column_a} vs ${top.column_b}`, config: { x: top.column_a, y: top.column_b }, position: place(6, 4) });
+    widgets.push({ type: "scatter", title: `${top.column_a} vs ${top.column_b}`, config: { x: top.column_a, y: top.column_b }, position: place(6, 5) });
   }
 
   // 6. Correlation heatmap
   if (meas.length >= 3) {
-    widgets.push({ type: "heatmap", title: "Correlation matrix", config: { fields: meas.map((m) => m.name) }, position: place(6, 4) });
+    widgets.push({ type: "heatmap", title: "Correlation matrix", config: { fields: meas.map((m) => m.name) }, position: place(6, 5) });
   }
 
   // 7. Treemap
