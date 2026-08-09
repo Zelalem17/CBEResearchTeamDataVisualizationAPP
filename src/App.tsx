@@ -1,11 +1,12 @@
 import { useState } from "react";
-import { Plus, LayoutGrid, Rows3 } from "lucide-react";
+import { Plus, LayoutGrid, Rows3, FolderOpen } from "lucide-react";
 import Topbar from "@/components/layout/Topbar";
 import Sidebar from "@/components/layout/Sidebar";
 import Hero from "@/components/upload/Hero";
 import FileUpload from "@/components/upload/FileUpload";
 import DatasetSection from "@/components/dashboard/DatasetSection";
 import { useDashboardStore } from "@/store/dashboardStore";
+import { useAuthStore } from "@/store/authStore";
 import type { Dataset, Widget } from "@/types";
 
 /** Single-page workspace. Two view modes:
@@ -16,12 +17,21 @@ import type { Dataset, Widget } from "@/types";
  *    at once. Sidebar clicks scroll to that dataset's section instead.
  * Both modes render through the same <DatasetSection>, so widgets/filters
  * never drift out of sync between the two views.
+ *
+ * Role gating: "admin" gets upload + edit + rearrange; "viewer" gets a
+ * read-only version of the same dashboard (filter/drill-down still work,
+ * upload/edit controls are hidden). Note this only gates what a given
+ * browser session can DO — it doesn't share data between browsers, since
+ * this app has no backend (see README for how to publish a dataset for
+ * every viewer to see).
  */
 export default function App() {
   const {
     tabs, activeDatasetId, addDataset, setActiveDataset, removeDataset,
     viewMode, setViewMode,
   } = useDashboardStore();
+  const role = useAuthStore((s) => s.role);
+  const isAdmin = role === "admin";
 
   const [showUpload, setShowUpload] = useState(Object.keys(tabs).length === 0);
 
@@ -52,7 +62,7 @@ export default function App() {
           datasets={datasetList}
           activeId={activeDatasetId}
           onSelect={handleSidebarSelect}
-          onRemove={removeDataset}
+          onRemove={isAdmin ? removeDataset : undefined}
         />
 
         <main className="flex-1 overflow-y-auto p-4 space-y-6 bg-gray-50 dark:bg-gray-950">
@@ -80,28 +90,40 @@ export default function App() {
                 </button>
               </div>
 
-              <button onClick={() => setShowUpload(true)} className="btn-secondary flex items-center gap-1.5 text-sm">
-                <Plus size={14} /> Add dataset
-              </button>
+              {isAdmin && (
+                <button onClick={() => setShowUpload(true)} className="btn-secondary flex items-center gap-1.5 text-sm">
+                  <Plus size={14} /> Add dataset
+                </button>
+              )}
             </div>
           )}
 
-          {showUpload && (
+          {showUpload && isAdmin && (
             <>
               {datasetIds.length === 0 && <Hero />}
               <FileUpload onImported={handleImported} />
             </>
           )}
 
+          {showUpload && !isAdmin && (
+            <div className="card p-12 text-center text-gray-400 flex flex-col items-center gap-2">
+              <FolderOpen size={28} className="text-gray-300 dark:text-gray-600" />
+              <p className="font-medium text-gray-500 dark:text-gray-300">No dataset published yet</p>
+              <p className="text-sm max-w-sm">
+                Viewer access doesn't include uploading. Ask an admin to publish a dashboard for you to view here.
+              </p>
+            </div>
+          )}
+
           {!showUpload && viewMode === "single" && activeTab && (
-            <DatasetSection datasetId={activeTab.dataset.dataset_id} />
+            <DatasetSection datasetId={activeTab.dataset.dataset_id} editable={isAdmin} />
           )}
 
           {!showUpload && viewMode === "grid" && (
             <div className="space-y-10 divide-y divide-gray-200 dark:divide-gray-800">
               {datasetIds.map((id) => (
                 <div key={id} className="pt-8 first:pt-0">
-                  <DatasetSection datasetId={id} showHeader />
+                  <DatasetSection datasetId={id} showHeader editable={isAdmin} />
                 </div>
               ))}
             </div>
@@ -109,7 +131,7 @@ export default function App() {
 
           {!showUpload && viewMode === "single" && !activeTab && (
             <div className="card p-12 text-center text-gray-400">
-              Select a dataset from the sidebar, or add a new one.
+              Select a dataset from the sidebar{isAdmin ? ", or add a new one." : "."}
             </div>
           )}
         </main>
