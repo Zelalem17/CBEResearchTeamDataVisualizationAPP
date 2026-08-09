@@ -9,7 +9,7 @@
 import type { Widget, WidgetType } from "@/types";
 
 /** Chart types the quick-switch dropdown offers. Deliberately excludes
- * heatmap/treemap (need a field *list*/hierarchy, not a single x/y pair)
+ * heatmap/treemap (need a field list or hierarchy, not a single x/y pair)
  * and kpi/table (not charts) — those keep their original type. */
 export const SWITCHABLE_CHART_TYPES: { type: WidgetType; label: string }[] = [
   { type: "bar", label: "Bar" },
