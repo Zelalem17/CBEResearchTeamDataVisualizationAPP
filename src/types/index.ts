@@ -21,7 +21,12 @@ export interface RelationshipHint {
 export type WidgetType =
   | "kpi" | "bar" | "line" | "pie" | "area" | "scatter"
   | "histogram" | "heatmap" | "treemap" | "gauge" | "table"
-  | "grouped_bar" | "grouped_line" | "category_scatter";
+  | "grouped_bar" | "grouped_line" | "category_scatter"
+  // "Detailed" variants: same underlying chart as "bar"/"pie", rendered
+  // side-by-side with a value + percentage list (config.listPosition:
+  // "left" | "right", default "right") so exact numbers are always
+  // readable, not just implied by bar height / slice angle.
+  | "bar_detailed" | "pie_detailed";
 
 export interface WidgetPosition {
   x: number;
