@@ -8,6 +8,7 @@ import WidgetCard from "./WidgetCard";
 import WidgetLibraryModal from "./WidgetLibraryModal";
 import { applyFilters } from "@/utils/filterUtils";
 import { exportNodeToPdf, exportDashboardToWord, exportRowsToExcel } from "@/utils/exportUtils";
+import { computeAutoFitSize } from "@/components/charts/chartConfigBuilders";
 
 interface DashboardGridProps {
   widgets: Widget[];
@@ -47,10 +48,28 @@ export default function DashboardGrid({
     filters
   );
 
-  const layout: Layout[] = widgets.map((w) => ({
-    i: w.id, x: w.position.x, y: w.position.y, w: w.position.w, h: w.position.h,
-    minW: 2, minH: 2,
-  }));
+  const layout: Layout[] = widgets.map((w) => {
+    // Content-aware floor: a chart is never rendered smaller than what
+    // its *current* (filtered) data actually needs to display fully —
+    // more categories, comparison series, or on-bar labels all raise
+    // the floor automatically, so the person never has to hunt for the
+    // resize handle and manually drag a graph open just to see it whole.
+    // Bumps the rendered size up to that floor and stops the grid's
+    // resize handle from dragging back below it; never shrinks a size
+    // the person (or a saved layout) already set larger than needed.
+    const fit = computeAutoFitSize(w, filteredRows);
+    const minW = Math.max(2, fit?.w ?? 2);
+    const minH = Math.max(2, fit?.h ?? 2);
+    return {
+      i: w.id,
+      x: w.position.x,
+      y: w.position.y,
+      w: Math.max(w.position.w, minW),
+      h: Math.max(w.position.h, minH),
+      minW,
+      minH,
+    };
+  });
 
   const handleLayoutChange = useCallback(
     (newLayout: Layout[]) => {
