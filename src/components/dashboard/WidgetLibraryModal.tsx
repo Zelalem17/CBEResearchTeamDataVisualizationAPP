@@ -61,7 +61,7 @@ export default function WidgetLibraryModal({ columns, onAdd, onClose }: WidgetLi
       case "kpi": widget = { ...base, title: `Total ${fieldB}`, config: { field: fieldB, agg: "sum" } }; break;
       case "pie": widget = { ...base, title: `${fieldB} by ${fieldA}`, config: { category: fieldA, value: fieldB, agg: "sum" } }; break;
       case "pie_detailed": widget = { ...base, title: `${fieldB} by ${fieldA}`, config: { category: fieldA, value: fieldB, agg: "sum", listPosition: "right" } }; break;
-      case "bar_detailed": widget = { ...base, title: `${fieldB} by ${fieldA}`, config: { x: fieldA, y: fieldB, agg: "sum", listPosition: "right" } }; break;
+      case "bar_detailed": widget = { ...base, title: `${fieldB} by ${fieldA}`, config: { x: fieldA, y: fieldB, agg: "sum", listPosition: "right", showLabels: true } }; break;
       case "scatter": widget = { ...base, title: `${fieldA} vs ${fieldB}`, config: { x: fieldA, y: fieldB } }; break;
       case "histogram": widget = { ...base, title: `Distribution of ${fieldB}`, config: { field: fieldB, bins: 20 } }; break;
       case "heatmap": widget = { ...base, title: "Correlation matrix", config: { fields: measures.map((m) => m.name) } }; break;
