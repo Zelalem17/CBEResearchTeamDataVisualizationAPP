@@ -842,7 +842,15 @@ export function computeAutoFitSize(widget: Widget, rows: DataRow[]): { w: number
   }
 }
 
-export function buildOptionForWidget(widget: Widget, rows: DataRow[]) {
+/** Return type is deliberately `any`: the builders return whatever
+ * shape each ECharts series/component needs (including `bar3D`,
+ * `surface`, and `liquidFill` series from the echarts-gl /
+ * echarts-liquidfill extensions, which aren't part of core echarts'
+ * bundled TypeScript types). Annotating this explicitly — rather than
+ * letting TS infer a big union of literal-typed branches — is what lets
+ * `<ReactECharts option={...}>` (typed against core echarts' option
+ * shape) accept it without a strict literal-type mismatch at build time. */
+export function buildOptionForWidget(widget: Widget, rows: DataRow[]): any {
   switch (widget.type) {
     case "bar": return buildBarOption(rows, widget.config);
     // "Detailed" variants reuse the exact same chart option as their
