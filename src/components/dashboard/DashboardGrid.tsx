@@ -140,7 +140,7 @@ export default function DashboardGrid({
     try {
       await exportDashboardToWord(
         gridRef.current,
-        widgets.map((w) => ({ id: w.id, title: w.title })),
+        widgets.map((w) => ({ id: w.id, title: w.title, gridW: w.position.w })),
         datasetName,
         `${datasetName} — Dashboard Report`,
         filteredRows
