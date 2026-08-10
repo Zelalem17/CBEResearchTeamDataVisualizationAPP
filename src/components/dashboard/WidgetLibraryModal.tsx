@@ -1,5 +1,8 @@
 import { useState } from "react";
-import { X, BarChart3, LineChart, PieChart, ScatterChart, AreaChart, Gauge, Grid3x3, Table2, Activity, TrendingUp, ListOrdered } from "lucide-react";
+import {
+  X, BarChart3, LineChart, PieChart, ScatterChart, AreaChart, Gauge, Grid3x3, Table2, Activity, TrendingUp,
+  ListOrdered, Box, Waves, GitCompare,
+} from "lucide-react";
 import type { ColumnProfile, Widget, WidgetType } from "@/types";
 
 interface WidgetLibraryModalProps {
@@ -13,11 +16,15 @@ const WIDGET_TYPES: { type: WidgetType; label: string; icon: any }[] = [
   { type: "bar", label: "Bar chart", icon: BarChart3 },
   { type: "bar_detailed", label: "Bar chart (values + %)", icon: ListOrdered },
   { type: "grouped_bar", label: "Grouped bar (compare)", icon: BarChart3 },
+  { type: "bar_line_combo", label: "Bar + line (Pareto)", icon: GitCompare },
+  { type: "bar3d", label: "3D bar (compare)", icon: Box },
   { type: "line", label: "Line chart", icon: LineChart },
   { type: "grouped_line", label: "Grouped line (compare)", icon: LineChart },
   { type: "area", label: "Area chart", icon: Activity },
   { type: "pie", label: "Pie chart", icon: PieChart },
   { type: "pie_detailed", label: "Pie chart (values + %)", icon: ListOrdered },
+  { type: "pie3d", label: "3D pie chart", icon: Box },
+  { type: "wave", label: "Wave (liquid fill)", icon: Waves },
   { type: "scatter", label: "Scatter plot", icon: ScatterChart },
   { type: "category_scatter", label: "Scatter (compare A vs B)", icon: ScatterChart },
   { type: "histogram", label: "Histogram", icon: AreaChart },
@@ -38,6 +45,7 @@ const DEFAULT_SIZE: Record<WidgetType, { w: number; h: number }> = {
   heatmap: { w: 6, h: 5 }, treemap: { w: 6, h: 5 }, gauge: { w: 3, h: 3 }, table: { w: 12, h: 6 },
   grouped_bar: { w: 6, h: 5 }, grouped_line: { w: 6, h: 5 }, category_scatter: { w: 6, h: 5 },
   bar_detailed: { w: 9, h: 5 }, pie_detailed: { w: 9, h: 5 },
+  bar_line_combo: { w: 7, h: 6 }, bar3d: { w: 7, h: 6 }, pie3d: { w: 6, h: 6 }, wave: { w: 4, h: 4 },
 };
 
 /** Modal used to add a new widget to the dashboard: pick a chart type,
@@ -59,16 +67,19 @@ export default function WidgetLibraryModal({ columns, onAdd, onClose }: WidgetLi
     let widget: Omit<Widget, "id">;
     switch (selected) {
       case "kpi": widget = { ...base, title: `Total ${fieldB}`, config: { field: fieldB, agg: "sum" } }; break;
+      case "wave": widget = { ...base, title: `${fieldB} (share)`, config: { field: fieldB, agg: "avg" } }; break;
       case "pie": widget = { ...base, title: `${fieldB} by ${fieldA}`, config: { category: fieldA, value: fieldB, agg: "sum" } }; break;
       case "pie_detailed": widget = { ...base, title: `${fieldB} by ${fieldA}`, config: { category: fieldA, value: fieldB, agg: "sum", listPosition: "right" } }; break;
+      case "pie3d": widget = { ...base, title: `${fieldB} by ${fieldA} (3D)`, config: { category: fieldA, value: fieldB, agg: "sum" } }; break;
       case "bar_detailed": widget = { ...base, title: `${fieldB} by ${fieldA}`, config: { x: fieldA, y: fieldB, agg: "sum", listPosition: "right", showLabels: true } }; break;
+      case "bar_line_combo": widget = { ...base, title: `${fieldB} by ${fieldA} (Pareto)`, config: { x: fieldA, y: fieldB, agg: "sum" } }; break;
       case "scatter": widget = { ...base, title: `${fieldA} vs ${fieldB}`, config: { x: fieldA, y: fieldB } }; break;
       case "histogram": widget = { ...base, title: `Distribution of ${fieldB}`, config: { field: fieldB, bins: 20 } }; break;
       case "heatmap": widget = { ...base, title: "Correlation matrix", config: { fields: measures.map((m) => m.name) } }; break;
       case "treemap": widget = { ...base, title: `${fieldB} breakdown`, config: { levels: [fieldA], value: fieldB } }; break;
       case "gauge": widget = { ...base, title: `${fieldB} (avg)`, config: { field: fieldB, agg: "avg" } }; break;
       case "table": widget = { ...base, title: "Data table", config: { columns: columns.map((c) => c.name), page_size: 25 } }; break;
-      case "grouped_bar": case "grouped_line": case "category_scatter":
+      case "grouped_bar": case "grouped_line": case "category_scatter": case "bar3d":
         widget = { ...base, title: `${fieldB} by ${fieldA}, compared by ${fieldC}`, config: { x: fieldA, y: fieldB, seriesField: fieldC, agg: "sum" } };
         break;
       default: widget = { ...base, title: `${fieldB} by ${fieldA}`, config: { x: fieldA, y: fieldB, agg: "sum" } };
@@ -104,7 +115,7 @@ export default function WidgetLibraryModal({ columns, onAdd, onClose }: WidgetLi
 
         {selected && selected !== "heatmap" && selected !== "table" && (
           <div className="grid grid-cols-2 gap-3 mb-4">
-            {["kpi", "histogram", "gauge"].includes(selected) ? (
+            {["kpi", "histogram", "gauge", "wave"].includes(selected) ? (
               <div className="col-span-2">
                 <label className="text-xs text-gray-500 mb-1 block">Field</label>
                 <select className="input text-sm" value={fieldB} onChange={(e) => setFieldB(e.target.value)}>
@@ -127,7 +138,7 @@ export default function WidgetLibraryModal({ columns, onAdd, onClose }: WidgetLi
                 </div>
               </>
             )}
-            {(selected === "grouped_bar" || selected === "grouped_line" || selected === "category_scatter") && (
+            {(selected === "grouped_bar" || selected === "grouped_line" || selected === "category_scatter" || selected === "bar3d") && (
               <div className="col-span-2">
                 <label className="text-xs text-gray-500 mb-1 block">Compare by (series)</label>
                 <select className="input text-sm" value={fieldC} onChange={(e) => setFieldC(e.target.value)}>
