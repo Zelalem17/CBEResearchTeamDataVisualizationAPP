@@ -5,15 +5,29 @@ import type { DataRow, Widget } from "@/types";
  * a thin wrapper and charts stay easy to unit-test.
  */
 
-const PALETTE = ["#6366f1", "#22c55e", "#f97316", "#06b6d4", "#e11d48", "#a855f7", "#eab308", "#64748b"];
+// Commercial Bank of Ethiopia identity: deep purple as the primary
+// brand color, warm gold as the accent, with near-black/charcoal and
+// soft neutrals rounding out a palette that reads as "CBE" rather than
+// a generic rainbow — every chart in the app draws its category colors
+// from this set. Mirrors tailwind.config.js's brand/gold scales.
+const PALETTE = [
+  "#5b2a83", // brand purple 600 — primary
+  "#f2a900", // gold 500 — accent
+  "#2a1339", // brand purple 900 — near-black plum
+  "#8f5cc4", // brand purple 400 — lighter purple
+  "#cc8b00", // gold 600 — deeper gold
+  "#4a2169", // brand purple 700
+  "#fbc94d", // gold 300 — light gold
+  "#1f2937", // charcoal — neutral for extra categories
+];
 
 // This app is for the Commercial Bank of Ethiopia — whenever a bar,
 // slice, or series is literally labelled "CBE" (as opposed to e.g. an
 // "Industry" comparison category), it should always render in CBE's
-// brand gold rather than whatever color the palette would otherwise
-// assign it, so CBE's own figures are instantly identifiable on every
-// chart. Matches the same gold used in the Word/PDF export branding.
-const CBE_GOLD = "#F2A900";
+// own brand purple rather than whatever color the palette would
+// otherwise assign it, so CBE's own figures are instantly identifiable
+// on every chart. Matches tailwind's brand-600.
+const CBE_BRAND_PURPLE = "#5b2a83";
 export function isCbeLabel(label: string): boolean {
   return /cbe/i.test(label);
 }
@@ -21,7 +35,7 @@ export function isCbeLabel(label: string): boolean {
  * or undefined so the caller's own default (palette / series index)
  * applies untouched. */
 function cbeColorOverride(label: string): { color: string } | undefined {
-  return isCbeLabel(label) ? { color: CBE_GOLD } : undefined;
+  return isCbeLabel(label) ? { color: CBE_BRAND_PURPLE } : undefined;
 }
 
 export function groupAndAgg(rows: DataRow[], groupField: string, valueField?: string, agg: string = "sum") {
@@ -44,6 +58,54 @@ export function groupAndAgg(rows: DataRow[], groupField: string, valueField?: st
     return { key, value: Math.round(value * 100) / 100 };
   });
   return entries.sort((a, b) => b.value - a.value);
+}
+
+/** Lightens a hex color toward white by `amount` (0–1) — used to build
+ * the top-to-bottom fade for the "gradient" bar style option. */
+function lightenHex(hex: string, amount: number): string {
+  const full = hex.replace("#", "");
+  const norm = full.length === 3 ? full.split("").map((c) => c + c).join("") : full;
+  const num = parseInt(norm, 16);
+  let r = (num >> 16) & 0xff, g = (num >> 8) & 0xff, b = num & 0xff;
+  r = Math.round(r + (255 - r) * amount);
+  g = Math.round(g + (255 - g) * amount);
+  b = Math.round(b + (255 - b) * amount);
+  return `#${[r, g, b].map((v) => v.toString(16).padStart(2, "0")).join("")}`;
+}
+
+/** A single bar/segment's fill per config.barStyle — the selectable
+ * "different design" for bar charts, cycled via the widget card's style
+ * toggle: "rounded" (default, rounded top corners), "flat" (square
+ * corners), or "gradient" (a soft top-to-bottom fade of the same
+ * color). */
+function barVisualStyle(baseColor: string, style: string | undefined) {
+  const radius = style === "flat" ? [0, 0, 0, 0] : [4, 4, 0, 0];
+  if (style === "gradient") {
+    return {
+      borderRadius: radius,
+      color: {
+        type: "linear", x: 0, y: 0, x2: 0, y2: 1,
+        colorStops: [{ offset: 0, color: baseColor }, { offset: 1, color: lightenHex(baseColor, 0.55) }],
+      },
+    };
+  }
+  return { borderRadius: radius, color: baseColor };
+}
+
+// Default fill for a single-series bar chart's non-CBE bars — CBE's own
+// accent gold, kept visually distinct from the brand purple reserved for
+// anything explicitly labelled "CBE" so a CBE bar always stands out
+// rather than blending into the chart's base tone.
+const DEFAULT_BAR_ACCENT = "#f2a900";
+
+/** Pie radius (and roseType) per config.pieStyle — the selectable
+ * "different design" for pie charts: "donut" (default, ring with a
+ * hole), "solid" (full pie, no hole), or "rose" (Nightingale rose —
+ * equal angles, radius scaled by value). */
+function pieStyleProps(style: string | undefined): { radius: [string, string] | string; roseType?: "radius" } {
+  if (style === "solid") return { radius: "70%" };
+  if (style === "rose") return { radius: ["20%", "75%"], roseType: "radius" };
+  return { radius: ["42%", "72%"] }; // donut, matches the original look
 }
 
 const baseTooltip = { trigger: "axis" as const, backgroundColor: "rgba(17,24,39,0.92)", borderWidth: 0, textStyle: { color: "#fff" } };
@@ -110,6 +172,7 @@ export function buildBarOption(rows: DataRow[], config: any) {
   const data = groupAndAgg(scoped, config.x, config.y, config.agg ?? "sum").slice(0, 15);
   const total = data.reduce((sum, d) => sum + d.value, 0) || 1;
   const showLabels = !!config.showLabels;
+  const barStyle = config.barStyle;
   return {
     color: PALETTE,
     tooltip: baseTooltip,
@@ -121,7 +184,7 @@ export function buildBarOption(rows: DataRow[], config: any) {
       data: data.map((d) => ({
         value: d.value,
         pct: (d.value / total) * 100,
-        itemStyle: { borderRadius: [4, 4, 0, 0], ...cbeColorOverride(d.key) },
+        itemStyle: barVisualStyle(isCbeLabel(d.key) ? CBE_BRAND_PURPLE : DEFAULT_BAR_ACCENT, barStyle),
       })),
       // Off by default — plain bar chart stays clean. Turned on via the
       // "%" toggle on the widget card, which prints the actual value and
@@ -136,15 +199,29 @@ export function buildLineOption(rows: DataRow[], config: any, area = false) {
   const scoped = applyConfigFilters(rows, config);
   const data = groupAndAgg(scoped, config.x, config.y, config.agg ?? "sum")
     .sort((a, b) => (a.key > b.key ? 1 : -1));
+  const showLabels = !!config.showLabels;
+  // "circle" (default), "diamond", "rect" (square), "triangle", or
+  // "none" — cycled via the widget card's shape toggle.
+  const symbol = config.symbolShape ?? "circle";
   return {
     color: PALETTE,
     tooltip: baseTooltip,
-    grid: baseGrid,
+    grid: showLabels ? barGrid : baseGrid,
     xAxis: { type: "category", data: data.map((d) => d.key), boundaryGap: false },
     yAxis: { type: "value" },
     series: [{
-      type: "line", data: data.map((d) => d.value), smooth: true, symbol: "circle", symbolSize: 6,
+      type: "line", data: data.map((d) => d.value), smooth: true,
+      symbol, symbolSize: symbol === "none" ? 0 : 8,
       areaStyle: area ? { opacity: 0.15 } : undefined, lineStyle: { width: 2.5 },
+      // Off by default. Turned on via the "%" toggle — prints the exact
+      // value at each dot instead of only implying it via the curve.
+      label: showLabels
+        ? {
+            show: true, position: "top", fontSize: 10, fontWeight: 600, color: "#111827",
+            backgroundColor: "rgba(255,255,255,0.94)", borderRadius: 4, padding: [2, 5] as [number, number],
+            formatter: (p: any) => Number(p.value).toLocaleString(),
+          }
+        : { show: false },
     }],
   };
 }
@@ -152,12 +229,13 @@ export function buildLineOption(rows: DataRow[], config: any, area = false) {
 export function buildPieOption(rows: DataRow[], config: any) {
   const scoped = applyConfigFilters(rows, config);
   const data = groupAndAgg(scoped, config.category, config.value, config.agg ?? "sum").slice(0, 10);
+  const { radius, roseType } = pieStyleProps(config.pieStyle);
   return {
     color: PALETTE,
     tooltip: { trigger: "item", backgroundColor: "rgba(17,24,39,0.92)", textStyle: { color: "#fff" } },
     legend: { bottom: 0, textStyle: { fontSize: 11 } },
     series: [{
-      type: "pie", radius: ["42%", "72%"], center: ["50%", "45%"],
+      type: "pie", radius, roseType, center: ["50%", "45%"],
       data: data.map((d) => ({
         name: d.key,
         value: d.value,
@@ -271,7 +349,7 @@ export function buildHeatmapOption(rows: DataRow[], config: any) {
     yAxis: { type: "category", data: fields, splitArea: { show: true }, axisLabel: { fontSize: 10 } },
     visualMap: {
       min: -1, max: 1, calculable: true, orient: "horizontal", bottom: 0,
-      inRange: { color: ["#e11d48", "#f8fafc", "#6366f1"] },
+      inRange: { color: ["#f2a900", "#f8fafc", "#5b2a83"] },
     },
     series: [{ type: "heatmap", data, label: { show: true, fontSize: 9 } }],
   };
@@ -328,13 +406,234 @@ export function buildGaugeOption(rows: DataRow[], config: any) {
   const max = values.length ? Math.max(...values) : 100;
   return {
     series: [{
-      type: "gauge", min: 0, max: Math.ceil(max * 1.1) || 100, progress: { show: true, width: 14 },
-      axisLine: { lineStyle: { width: 14 } }, pointer: { show: false },
+      type: "gauge", min: 0, max: Math.ceil(max * 1.1) || 100,
+      progress: { show: true, width: 14, itemStyle: { color: CBE_BRAND_PURPLE } },
+      axisLine: { lineStyle: { width: 14, color: [[1, "#f3e8ff"]] } }, pointer: { show: false },
       axisTick: { show: false }, splitLine: { length: 8 },
       axisLabel: { fontSize: 9, distance: 14 },
-      detail: { valueAnimation: true, fontSize: 22, offsetCenter: [0, "35%"], formatter: (v: number) => v.toFixed(1) },
+      detail: { valueAnimation: true, fontSize: 22, offsetCenter: [0, "35%"], formatter: (v: number) => v.toFixed(1), color: CBE_BRAND_PURPLE },
       data: [{ value: Math.round(avg * 100) / 100 }],
     }],
+  };
+}
+
+/** "Wave" / liquid-fill chart (needs the `echarts-liquidfill` extension,
+ * registered globally in ChartRenderer.tsx): one ratio rendered as an
+ * animated rising-water circle — a distinctive, attention-grabbing way
+ * to show a single utilization/share/completion metric (e.g. "% of
+ * branches reporting", "capacity used") that a plain gauge doesn't
+ * quite capture. config.max lets the person say what "100%" means; by
+ * default a value over 1 is read as already being a 0–100 percentage. */
+export function buildWaveOption(rows: DataRow[], config: any) {
+  const scoped = applyConfigFilters(rows, config);
+  const values = scoped.map((r) => Number(r[config.field])).filter(Number.isFinite);
+
+  let ratio: number;
+  if (config.shareOf) {
+    // Ratio of one sub-category's total to the whole scoped total (e.g.
+    // CBE's share of CBE+Industry for this metric) rather than a single
+    // aggregated value against a fixed max.
+    const { field: shareField, value: shareValue } = config.shareOf as { field: string; value: string };
+    const numeratorRows = scoped.filter((r) => String(r[shareField] ?? "") === String(shareValue));
+    const numeratorVals = numeratorRows.map((r) => Number(r[config.field])).filter(Number.isFinite);
+    const numerator = numeratorVals.reduce((a, b) => a + b, 0);
+    const denominator = values.reduce((a, b) => a + b, 0) || 1;
+    ratio = Math.max(0, Math.min(1, numerator / denominator));
+  } else {
+    const raw = values.length ? aggValues(values, config.agg ?? "avg") : 0;
+    const max = config.max ?? (raw > 1 ? 100 : 1);
+    ratio = Math.max(0, Math.min(1, max ? raw / max : 0));
+  }
+
+  return {
+    series: [{
+      type: "liquidFill",
+      radius: "78%",
+      data: [
+        { value: ratio, itemStyle: { color: CBE_BRAND_PURPLE, opacity: 0.88 } },
+        { value: Math.max(0, ratio - 0.04), itemStyle: { color: "#f2a900", opacity: 0.5 } },
+      ],
+      backgroundStyle: { color: "rgba(91,42,131,0.06)" },
+      outline: { show: true, borderDistance: 4, itemStyle: { borderColor: CBE_BRAND_PURPLE, borderWidth: 3 } },
+      label: {
+        formatter: () => `${(ratio * 100).toFixed(1)}%`,
+        fontSize: 24, fontWeight: 700, color: "#2a1339",
+      },
+      amplitude: 8,
+      waveAnimation: true,
+      animationDuration: 2200,
+      animationDurationUpdate: 900,
+    }],
+  };
+}
+
+/** Bar + line combined in one chart, as a Pareto-style combo: bars are
+ * each category's value (sorted highest-first, same as a plain bar
+ * chart), and the line is the running cumulative percentage of the
+ * grand total on a secondary 0–100% axis — a standard, genuinely useful
+ * pairing for spotting how few categories account for most of the
+ * total, rather than an arbitrary bar/line mashup. */
+export function buildBarLineComboOption(rows: DataRow[], config: any) {
+  const scoped = applyConfigFilters(rows, config);
+  const data = groupAndAgg(scoped, config.x, config.y, config.agg ?? "sum").slice(0, 15);
+  const total = data.reduce((sum, d) => sum + d.value, 0) || 1;
+  let running = 0;
+  const cumulativePct = data.map((d) => {
+    running += d.value;
+    return Math.round((running / total) * 1000) / 10;
+  });
+
+  return {
+    color: [DEFAULT_BAR_ACCENT, CBE_BRAND_PURPLE],
+    tooltip: { ...baseTooltip },
+    legend: { bottom: 0, textStyle: { fontSize: 11 }, data: ["Value", "Cumulative %"] },
+    grid: { ...baseGrid, bottom: 56 },
+    xAxis: { type: "category", data: data.map((d) => d.key), axisLabel: { rotate: data.length > 6 ? 30 : 0 } },
+    yAxis: [
+      { type: "value", name: "Value" },
+      { type: "value", name: "Cumulative %", min: 0, max: 100, position: "right", axisLabel: { formatter: "{value}%" }, splitLine: { show: false } },
+    ],
+    series: [
+      {
+        name: "Value", type: "bar", yAxisIndex: 0, barMaxWidth: 36,
+        data: data.map((d) => ({ value: d.value, itemStyle: barVisualStyle(isCbeLabel(d.key) ? CBE_BRAND_PURPLE : DEFAULT_BAR_ACCENT, config.barStyle) })),
+      },
+      {
+        name: "Cumulative %", type: "line", yAxisIndex: 1, smooth: false,
+        symbol: "circle", symbolSize: 6,
+        lineStyle: { width: 2.5, color: CBE_BRAND_PURPLE },
+        itemStyle: { color: CBE_BRAND_PURPLE },
+        data: cumulativePct,
+      },
+    ],
+  };
+}
+
+/** 3D bar chart (needs `echarts-gl`, registered globally in
+ * ChartRenderer.tsx): x category × comparison category (e.g. Period ×
+ * CBE/Industry), with bar height as the value — the natural use of a
+ * third (z) dimension, rather than a flat single-series bar chart
+ * turned 3D for no reason. */
+export function buildBar3DOption(rows: DataRow[], config: any) {
+  const scoped = applyConfigFilters(rows, config);
+  const xField = config.x;
+  const seriesField = config.seriesField;
+  const valueField = config.y;
+  const agg = config.agg ?? "sum";
+
+  const xValues = Array.from(new Set(scoped.map((r) => String(r[xField] ?? "—")))).sort();
+  const yValues = Array.from(new Set(scoped.map((r) => String(r[seriesField] ?? "—"))));
+
+  const data: [number, number, number][] = [];
+  let maxVal = 0;
+  xValues.forEach((xv, xi) => {
+    yValues.forEach((yv, yi) => {
+      const matching = scoped.filter((r) => String(r[xField] ?? "—") === xv && String(r[seriesField] ?? "—") === yv);
+      const vals = matching.map((r) => Number(r[valueField])).filter(Number.isFinite);
+      if (!vals.length) return;
+      const v = Math.round(aggValues(vals, agg) * 100) / 100;
+      maxVal = Math.max(maxVal, v);
+      data.push([xi, yi, v]);
+    });
+  });
+
+  return {
+    tooltip: {
+      backgroundColor: "rgba(17,24,39,0.92)", textStyle: { color: "#fff" },
+      formatter: (p: any) => `${xValues[p.value[0]]} · ${yValues[p.value[1]]}<br/>${Number(p.value[2]).toLocaleString()}`,
+    },
+    visualMap: {
+      show: false, min: 0, max: maxVal || 1, dimension: 2,
+      inRange: { color: ["#fde08a", "#f2a900", CBE_BRAND_PURPLE] },
+    },
+    xAxis3D: { type: "category", data: xValues },
+    yAxis3D: { type: "category", data: yValues },
+    zAxis3D: { type: "value" },
+    grid3D: {
+      boxWidth: 100, boxDepth: 70, boxHeight: 55,
+      viewControl: { autoRotate: false, distance: 190, alpha: 22, beta: 30 },
+      light: { main: { intensity: 1.1, shadow: false }, ambient: { intensity: 0.35 } },
+    },
+    series: [{
+      type: "bar3D", data, shading: "lambert",
+      barSize: Math.max(4, Math.min(16, 60 / Math.max(xValues.length, yValues.length, 1))),
+      itemStyle: { opacity: 0.92 },
+    }],
+  };
+}
+
+/** Parametric surface equation for one slice of a 3D pie/donut, per the
+ * standard echarts-gl "3D pie" recipe: a `surface` series shaped like a
+ * wedge of a torus. `startRatio`/`endRatio` are that slice's cumulative
+ * share of the whole (0–1); `k` controls the donut hole size. */
+function pie3DParametricEquation(startRatio: number, endRatio: number, k: number, height: number) {
+  const startRadian = startRatio * Math.PI * 2;
+  const endRadian = endRatio * Math.PI * 2;
+  return {
+    u: { min: -Math.PI, max: Math.PI * 3, step: Math.PI / 32 },
+    v: { min: 0, max: Math.PI * 2, step: Math.PI / 20 },
+    x: (u: number, v: number) => {
+      if (u < startRadian) return Math.cos(startRadian) * (1 + Math.cos(v) * k);
+      if (u > endRadian) return Math.cos(endRadian) * (1 + Math.cos(v) * k);
+      return Math.cos(u) * (1 + Math.cos(v) * k);
+    },
+    y: (u: number, v: number) => {
+      if (u < startRadian) return Math.sin(startRadian) * (1 + Math.cos(v) * k);
+      if (u > endRadian) return Math.sin(endRadian) * (1 + Math.cos(v) * k);
+      return Math.sin(u) * (1 + Math.cos(v) * k);
+    },
+    z: (u: number, v: number) => {
+      if (u < -Math.PI * 0.5) return Math.sin(u);
+      if (u > Math.PI * 2.5) return Math.sin(u);
+      return Math.sin(v) > 0 ? height : -1;
+    },
+  };
+}
+
+/** 3D pie chart (needs `echarts-gl`) — each slice is its own `surface`
+ * series shaped by pie3DParametricEquation, since echarts-gl has no
+ * native pie3D series type; this is the standard community recipe for
+ * one. Capped at 8 slices to keep the render (and the legend) legible. */
+export function buildPie3DOption(rows: DataRow[], config: any) {
+  const scoped = applyConfigFilters(rows, config);
+  const data = groupAndAgg(scoped, config.category, config.value, config.agg ?? "sum").slice(0, 8);
+  const total = data.reduce((s, d) => s + d.value, 0) || 1;
+
+  let cumulative = 0;
+  const series = data.map((d, i) => {
+    const startRatio = cumulative / total;
+    cumulative += d.value;
+    const endRatio = cumulative / total;
+    const color = isCbeLabel(d.key) ? CBE_BRAND_PURPLE : PALETTE[i % PALETTE.length];
+    return {
+      name: d.key,
+      type: "surface",
+      parametric: true,
+      wireframe: { show: false },
+      itemStyle: { color, opacity: 0.98 },
+      parametricEquation: pie3DParametricEquation(startRatio, endRatio, 1 / 3, 0.22),
+    };
+  });
+
+  return {
+    tooltip: {
+      backgroundColor: "rgba(17,24,39,0.92)", textStyle: { color: "#fff" },
+      formatter: (p: any) => {
+        const d = data.find((x) => x.key === p.seriesName);
+        if (!d) return p.seriesName;
+        return `${p.seriesName}<br/>${d.value.toLocaleString()} (${((d.value / total) * 100).toFixed(1)}%)`;
+      },
+    },
+    legend: { bottom: 0, textStyle: { fontSize: 11 }, data: data.map((d) => d.key) },
+    xAxis3D: { min: -1, max: 1 },
+    yAxis3D: { min: -1, max: 1 },
+    zAxis3D: { min: -1, max: 1 },
+    grid3D: {
+      show: false, boxHeight: 15,
+      viewControl: { autoRotate: false, distance: 165, alpha: 32, beta: 20 },
+      light: { main: { intensity: 1.2, shadow: false }, ambient: { intensity: 0.4 } },
+    },
+    series,
   };
 }
 
@@ -373,14 +672,11 @@ export function buildGroupedBarOption(rows: DataRow[], config: any) {
       if (v === null) return null;
       return { value: v, pct: (v / totalsByX[xi]) * 100 };
     });
-    const seriesColor = isCbeLabel(sv) ? CBE_GOLD : PALETTE[i % PALETTE.length];
+    const seriesColor = isCbeLabel(sv) ? CBE_BRAND_PURPLE : PALETTE[i % PALETTE.length];
     const showLabels = !!config.showLabels;
     return {
       name: sv, type: "bar", data,
-      itemStyle: {
-        borderRadius: config.stacked ? [0, 0, 0, 0] : [4, 4, 0, 0],
-        color: seriesColor,
-      },
+      itemStyle: barVisualStyle(seriesColor, config.stacked ? "flat" : config.barStyle),
       // Off by default — turned on via the "%" toggle on the widget
       // card. When on: actual value + this series' share of that
       // x-group's total (e.g. CBE's number and its % of CBE+Industry
@@ -415,6 +711,8 @@ export function buildGroupedLineOption(rows: DataRow[], config: any) {
   const xValues = Array.from(new Set(scoped.map((r) => String(r[xField] ?? "—")))).sort();
   const seriesValues = Array.from(new Set(scoped.map((r) => String(r[seriesField] ?? "—"))));
 
+  const symbol = config.symbolShape ?? "circle";
+  const showLabels = !!config.showLabels;
   const series = seriesValues.map((sv, i) => {
     const data = xValues.map((xv) => {
       const matching = scoped.filter((r) => String(r[xField] ?? "—") === xv && String(r[seriesField] ?? "—") === sv);
@@ -422,12 +720,18 @@ export function buildGroupedLineOption(rows: DataRow[], config: any) {
       if (!vals.length) return null;
       return Math.round(aggValues(vals, agg) * 10000) / 10000;
     });
-    const seriesColor = isCbeLabel(sv) ? CBE_GOLD : PALETTE[i % PALETTE.length];
+    const seriesColor = isCbeLabel(sv) ? CBE_BRAND_PURPLE : PALETTE[i % PALETTE.length];
     return {
-      name: sv, type: "line", data, smooth: true, symbol: "circle", symbolSize: 6,
+      name: sv, type: "line", data, smooth: true, symbol, symbolSize: symbol === "none" ? 0 : 7,
       lineStyle: { width: 2.5, color: seriesColor },
       itemStyle: { color: seriesColor },
       connectNulls: true,
+      label: showLabels
+        ? {
+            show: true, position: "top", fontSize: 9, fontWeight: 600, color: seriesColor,
+            formatter: (p: any) => (p.value == null ? "" : Number(p.value).toLocaleString()),
+          }
+        : { show: false },
       ...(config.area ? { areaStyle: { opacity: 0.18, color: seriesColor } } : {}),
     };
   });
@@ -436,7 +740,7 @@ export function buildGroupedLineOption(rows: DataRow[], config: any) {
     color: PALETTE,
     tooltip: { ...baseTooltip, axisPointer: { type: "line" } },
     legend: { bottom: 0, textStyle: { fontSize: 11 } },
-    grid: { ...baseGrid, bottom: 56 },
+    grid: showLabels ? { ...barGrid, bottom: 56 } : { ...baseGrid, bottom: 56 },
     xAxis: { type: "category", data: xValues, boundaryGap: false, axisLabel: { rotate: xValues.length > 6 ? 30 : 0 } },
     yAxis: { type: "value" },
     series,
@@ -518,6 +822,21 @@ export function computeAutoFitSize(widget: Widget, rows: DataRow[]): { w: number
     case "heatmap":
     case "treemap":
       return { w: 6, h: 5 };
+    case "bar_line_combo": {
+      if (!config.x) return null;
+      const n = groupAndAgg(scoped, config.x, config.y, config.agg ?? "sum").slice(0, 15).length;
+      let h = 6; // dual y-axis + legend needs a bit more than a plain bar
+      if (n > 8) h += 1;
+      let w = 7;
+      if (n > 8) w = 9;
+      return { w, h };
+    }
+    case "bar3d":
+      return { w: 7, h: 6 }; // 3D viewport needs real estate to read
+    case "pie3d":
+      return { w: 6, h: 6 };
+    case "wave":
+      return { w: 4, h: 4 }; // compact, square-ish like a gauge
     default:
       return null;
   }
@@ -543,6 +862,10 @@ export function buildOptionForWidget(widget: Widget, rows: DataRow[]) {
     case "heatmap": return buildHeatmapOption(rows, widget.config);
     case "treemap": return buildTreemapOption(rows, widget.config);
     case "gauge": return buildGaugeOption(rows, widget.config);
+    case "wave": return buildWaveOption(rows, widget.config);
+    case "bar_line_combo": return buildBarLineComboOption(rows, widget.config);
+    case "bar3d": return buildBar3DOption(rows, widget.config);
+    case "pie3d": return buildPie3DOption(rows, widget.config);
     default: return {};
   }
 }
