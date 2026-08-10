@@ -69,6 +69,8 @@ export function remapWidgetConfig(widget: Widget, newType: WidgetType): Widget {
       config = { x: xField, y: yField, seriesField: seriesField ?? xField, ...carryOver };
       break;
     case "grouped_bar":
+      config = { x: xField, y: yField, seriesField: seriesField ?? xField, agg, showLabels: !!widget.config?.showLabels, ...carryOver };
+      break;
     case "grouped_line":
       config = { x: xField, y: yField, seriesField: seriesField ?? xField, agg, ...carryOver };
       break;
@@ -79,9 +81,11 @@ export function remapWidgetConfig(widget: Widget, newType: WidgetType): Widget {
       config = { field: yField ?? xField, agg: agg === "sum" ? "avg" : agg, ...carryOver };
       break;
     case "bar_detailed":
-      config = { x: xField, y: yField, agg, listPosition: widget.config?.listPosition ?? "right", ...carryOver };
+      config = { x: xField, y: yField, agg, listPosition: widget.config?.listPosition ?? "right", showLabels: widget.config?.showLabels ?? true, ...carryOver };
       break;
     case "bar":
+      config = { x: xField, y: yField, agg, showLabels: !!widget.config?.showLabels, ...carryOver };
+      break;
     case "line":
     case "area":
     default:
