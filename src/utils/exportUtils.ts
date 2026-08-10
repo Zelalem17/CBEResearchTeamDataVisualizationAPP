@@ -166,19 +166,37 @@ export function exportRowsToExcel(rows: DataRow[], sheetName: string, filename: 
 }
 
 const MAX_WORD_TABLE_ROWS = 200;
+// Full-width image (a lone big widget — a table, or anything the admin
+// sized wider than half the dashboard grid).
 const WIDGET_IMAGE_WIDTH = 560;
+// Half-width image, used when two normal-sized charts are placed
+// side by side in a single Word table row instead of stacking.
+const PAIRED_IMAGE_WIDTH = 230;
+// A widget wider than this fraction of the live dashboard's 12-column
+// grid is treated as "too big to pair" and gets its own full-width row
+// in the export, same as a data table always does.
+const PAIRABLE_MAX_GRID_W = 6;
 
 export interface ExportableWidget {
   id: string;
   title: string;
+  /** The widget's column span on the live 12-column dashboard grid
+   * (widget.position.w) — used to decide whether it's small enough to
+   * sit side by side with another widget in the export, or big enough
+   * that it needs its own full-width row (tables, wide charts, etc). */
+  gridW: number;
 }
 
 /** Export a Word (.docx) report: a title block, then every widget
- * captured and inserted as its **own individual image** (with its own
- * heading) rather than one merged screenshot of the whole dashboard, and
- * finally a data table of the filtered rows. Everything — screenshots,
- * document assembly, fonts, colors — happens client-side; no server
- * involved, same as the PDF/Excel/PNG exports.
+ * captured and inserted as an image (with its own heading), and
+ * finally a data table of the filtered rows. Two widgets are placed
+ * side by side in a borderless table row whenever both are narrow
+ * enough on the live dashboard grid (see PAIRABLE_MAX_GRID_W) — a wide
+ * widget (like the data table, or anything the admin resized past half
+ * the grid) always gets a full-width row of its own instead, so nothing
+ * gets squeezed. Everything — screenshots, document assembly, fonts,
+ * colors — happens client-side; no server involved, same as the
+ * PDF/Excel/PNG exports.
  *
  * `gridNode` is the dashboard grid container; each widget's root element
  * inside it carries a `data-widget-capture="<id>"` attribute (set on
@@ -213,7 +231,11 @@ export async function exportDashboardToWord(
     }),
   ];
 
-  // --- One image per widget, each with its own heading ---
+  // --- Capture every widget first (sequentially — each capture clones
+  // and removes its own off-screen node, so this stays simple and safe
+  // rather than racing several DOM clones at once). ---
+  interface CapturedWidget { widget: ExportableWidget; buffer: ArrayBuffer; ratio: number }
+  const captured: CapturedWidget[] = [];
   for (const widget of widgets) {
     // Targets WidgetCard's own root element (marked with
     // data-widget-capture), not the react-grid-layout item that
@@ -224,11 +246,13 @@ export async function exportDashboardToWord(
     // indirectly, is what caused that in earlier exports.
     const node = gridNode.querySelector<HTMLElement>(`[data-widget-capture="${widget.id}"]`);
     if (!node) continue;
-
     const { buffer, ratio } = await screenshotNode(node);
+    captured.push({ widget, buffer, ratio });
+  }
+
+  const fullWidthBlock = (widget: ExportableWidget, buffer: ArrayBuffer, ratio: number) => {
     const width = WIDGET_IMAGE_WIDTH;
     const height = Math.round(width / ratio);
-
     children.push(
       new Paragraph({
         children: [new TextRun({ text: widget.title, bold: true, size: 26, font: DOC_FONT, color: BRAND_PURPLE })],
@@ -243,7 +267,62 @@ export async function exportDashboardToWord(
         spacing: { after: 120 },
       })
     );
+  };
+
+  const noBorder = { style: BorderStyle.NONE, size: 0, color: "FFFFFF" };
+
+  const pairCell = (entry: CapturedWidget) => {
+    const width = PAIRED_IMAGE_WIDTH;
+    const height = Math.round(width / entry.ratio);
+    return new TableCell({
+      width: { size: 50, type: WidthType.PERCENTAGE },
+      borders: { top: noBorder, bottom: noBorder, left: noBorder, right: noBorder },
+      margins: { top: 40, bottom: 200, left: 40, right: 40 },
+      children: [
+        new Paragraph({
+          children: [new TextRun({ text: entry.widget.title, bold: true, size: 22, font: DOC_FONT, color: BRAND_PURPLE })],
+          spacing: { after: 100 },
+        }),
+        new Paragraph({
+          children: [new ImageRun({ data: entry.buffer, transformation: { width, height } })],
+          alignment: AlignmentType.CENTER,
+        }),
+      ],
+    });
+  };
+
+  // --- Lay out: pair up consecutive small widgets two-per-row; a big
+  // widget (or a leftover odd one at the end) gets a full-width row. ---
+  let pending: CapturedWidget | null = null;
+  const flushPending = () => {
+    if (!pending) return;
+    fullWidthBlock(pending.widget, pending.buffer, pending.ratio);
+    pending = null;
+  };
+
+  for (const entry of captured) {
+    const isPairable = entry.widget.gridW <= PAIRABLE_MAX_GRID_W;
+    if (!isPairable) {
+      flushPending(); // a lone pending small widget becomes its own row
+      fullWidthBlock(entry.widget, entry.buffer, entry.ratio);
+      continue;
+    }
+    if (!pending) {
+      pending = entry;
+      continue;
+    }
+    // Two pairable widgets in hand — place them side by side.
+    const first = pending;
+    pending = null;
+    children.push(
+      new Table({
+        width: { size: 100, type: WidthType.PERCENTAGE },
+        borders: { top: noBorder, bottom: noBorder, left: noBorder, right: noBorder, insideHorizontal: noBorder, insideVertical: noBorder },
+        rows: [new TableRow({ children: [pairCell(first), pairCell(entry)] })],
+      })
+    );
   }
+  flushPending(); // odd one out at the very end, if any
 
   // --- Data table appendix ---
   const columns = rows.length ? Object.keys(rows[0]) : [];
