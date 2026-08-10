@@ -34,6 +34,18 @@ function formatNumber(n: number): string {
   return n.toLocaleString(undefined, { maximumFractionDigits: 2 });
 }
 
+/** Scales the headline number's font size down as its formatted text
+ * gets longer, the same idea as the chart auto-fit sizing: content
+ * decides how much room it needs rather than a single fixed size
+ * clipping or overflowing depending on the data. */
+function valueFontSizeClass(formatted: string): string {
+  const len = formatted.length;
+  if (len <= 6) return "text-3xl";
+  if (len <= 9) return "text-2xl";
+  if (len <= 12) return "text-xl";
+  return "text-lg";
+}
+
 export default function KpiCard({ widget, rows }: KpiCardProps) {
   const { field, agg = "sum", filters } = widget.config;
 
@@ -50,13 +62,16 @@ export default function KpiCard({ widget, rows }: KpiCardProps) {
 
   const isUp = deltaPct > 0.5;
   const isDown = deltaPct < -0.5;
+  const formattedValue = formatNumber(value);
 
   return (
     <div className="h-full flex flex-col justify-between p-1.5">
-      <span className="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide leading-relaxed">{widget.title}</span>
-      <div className="flex items-end justify-between mt-1">
-        <span className="text-3xl font-bold text-gray-900 dark:text-white tabular-nums">{formatNumber(value)}</span>
-        <span className={`flex items-center gap-1 text-xs font-semibold ${isUp ? "text-emerald-600" : isDown ? "text-rose-600" : "text-gray-400"}`}>
+      <span className="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide leading-relaxed break-words">{widget.title}</span>
+      <div className="flex items-end justify-between gap-2 mt-1 min-w-0">
+        <span className={`${valueFontSizeClass(formattedValue)} font-bold text-gray-900 dark:text-white tabular-nums truncate`} title={value.toLocaleString()}>
+          {formattedValue}
+        </span>
+        <span className={`flex items-center gap-1 text-xs font-semibold shrink-0 ${isUp ? "text-emerald-600" : isDown ? "text-rose-600" : "text-gray-400"}`}>
           {isUp ? <TrendingUp size={14} /> : isDown ? <TrendingDown size={14} /> : <Minus size={14} />}
           {Math.abs(deltaPct).toFixed(1)}%
         </span>
