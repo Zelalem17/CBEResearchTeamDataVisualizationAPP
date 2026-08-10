@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Image as ImageIcon, X, GripVertical, Maximize2, Minimize2 } from "lucide-react";
+import { Image as ImageIcon, X, GripVertical, Maximize2, Minimize2, Percent } from "lucide-react";
 import type { DataRow, Widget } from "@/types";
 import ChartRenderer from "@/components/charts/ChartRenderer";
 import KpiCard from "@/components/kpi/KpiCard";
@@ -13,7 +13,15 @@ interface WidgetCardProps {
   /** Omit to hide the remove control (viewer-role / read-only sessions). */
   onRemove?: () => void;
   onDrillDown?: (field: string, value: string) => void;
+  /** Omit to hide the value/percent-label toggle (viewer-role sessions,
+   * or widget types where it doesn't apply). */
+  onToggleLabels?: () => void;
 }
+
+// Bar and grouped-bar are clean by default; pie already always shows its
+// own value+percent (that one isn't toggleable — it's just how pie
+// reads). This is the set of types where the toggle button applies.
+const LABEL_TOGGLEABLE_TYPES = new Set(["bar", "bar_detailed", "grouped_bar"]);
 
 function WidgetBody({ widget, rows, onDrillDown }: Pick<WidgetCardProps, "widget" | "rows" | "onDrillDown">) {
   if (widget.type === "kpi") return <KpiCard widget={widget} rows={rows} />;
@@ -22,11 +30,13 @@ function WidgetBody({ widget, rows, onDrillDown }: Pick<WidgetCardProps, "widget
 }
 
 /** The chrome around every widget: title bar with drag handle, remove
- * button, per-widget PNG export, expand-to-fullscreen, and the widget's
- * own visualization. */
-export default function WidgetCard({ widget, rows, onRemove, onDrillDown }: WidgetCardProps) {
+ * button, per-widget PNG export, value-label toggle, expand-to-fullscreen,
+ * and the widget's own visualization. */
+export default function WidgetCard({ widget, rows, onRemove, onDrillDown, onToggleLabels }: WidgetCardProps) {
   const nodeRef = useRef<HTMLDivElement>(null);
   const [expanded, setExpanded] = useState(false);
+  const labelsOn = !!widget.config?.showLabels;
+  const showLabelToggle = !!onToggleLabels && LABEL_TOGGLEABLE_TYPES.has(widget.type);
 
   const handleExportPng = async () => {
     if (nodeRef.current) await exportNodeToPng(nodeRef.current, widget.title.replace(/\s+/g, "_"));
@@ -46,6 +56,20 @@ export default function WidgetCard({ widget, rows, onRemove, onDrillDown }: Widg
           </span>
         </div>
         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+          {showLabelToggle && (
+            <button
+              onClick={onToggleLabels}
+              title={labelsOn ? "Hide value/% labels on chart" : "Show value/% labels on chart"}
+              aria-pressed={labelsOn}
+              className={`p-1 rounded transition-colors ${
+                labelsOn
+                  ? "bg-gold-100 text-gold-700 dark:bg-gold-900/40 dark:text-gold-400"
+                  : "hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-400"
+              }`}
+            >
+              <Percent size={13} />
+            </button>
+          )}
           <button onClick={() => setExpanded(true)} title="Expand" className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-400">
             <Maximize2 size={13} />
           </button>
