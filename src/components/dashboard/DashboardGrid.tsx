@@ -3,12 +3,12 @@ import GridLayout, { Layout, WidthProvider } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
 import { Plus, FileSpreadsheet, FileImage, FileText } from "lucide-react";
-import type { DataRow, FilterRule, Widget } from "@/types";
+import type { DataRow, FilterRule, Widget, WidgetType } from "@/types";
 import WidgetCard from "./WidgetCard";
 import WidgetLibraryModal from "./WidgetLibraryModal";
 import { applyFilters } from "@/utils/filterUtils";
 import { exportNodeToPdf, exportDashboardToWord, exportRowsToExcel } from "@/utils/exportUtils";
-import { computeAutoFitSize } from "@/components/charts/chartConfigBuilders";
+import { remapWidgetConfig } from "@/services/chartTypeSwitch";
 
 interface DashboardGridProps {
   widgets: Widget[];
@@ -48,28 +48,10 @@ export default function DashboardGrid({
     filters
   );
 
-  const layout: Layout[] = widgets.map((w) => {
-    // Content-aware floor: a chart is never rendered smaller than what
-    // its *current* (filtered) data actually needs to display fully —
-    // more categories, comparison series, or on-bar labels all raise
-    // the floor automatically, so the person never has to hunt for the
-    // resize handle and manually drag a graph open just to see it whole.
-    // Bumps the rendered size up to that floor and stops the grid's
-    // resize handle from dragging back below it; never shrinks a size
-    // the person (or a saved layout) already set larger than needed.
-    const fit = computeAutoFitSize(w, filteredRows);
-    const minW = Math.max(2, fit?.w ?? 2);
-    const minH = Math.max(2, fit?.h ?? 2);
-    return {
-      i: w.id,
-      x: w.position.x,
-      y: w.position.y,
-      w: Math.max(w.position.w, minW),
-      h: Math.max(w.position.h, minH),
-      minW,
-      minH,
-    };
-  });
+  const layout: Layout[] = widgets.map((w) => ({
+    i: w.id, x: w.position.x, y: w.position.y, w: w.position.w, h: w.position.h,
+    minW: 2, minH: 2,
+  }));
 
   const handleLayoutChange = useCallback(
     (newLayout: Layout[]) => {
@@ -90,10 +72,10 @@ export default function DashboardGrid({
 
   const handleRemoveWidget = (id: string) => onWidgetsChange(widgets.filter((w) => w.id !== id));
 
-  const handleToggleLabels = (id: string) =>
-    onWidgetsChange(
-      widgets.map((w) => (w.id === id ? { ...w, config: { ...w.config, showLabels: !w.config?.showLabels } } : w))
-    );
+  /** Per-widget chart-type switch — works for any widget on any dataset,
+   * not just the panel-comparison ones (see services/chartTypeSwitch.ts). */
+  const handleChangeWidgetType = (id: string, newType: WidgetType) =>
+    onWidgetsChange(widgets.map((w) => (w.id === id ? remapWidgetConfig(w, newType) : w)));
 
   const handleExportPdf = async () => {
     if (gridRef.current) await exportNodeToPdf(gridRef.current, datasetName, `${datasetName} — Dashboard`);
@@ -107,7 +89,7 @@ export default function DashboardGrid({
     try {
       await exportDashboardToWord(
         gridRef.current,
-        widgets.map((w) => ({ id: w.id, title: w.title })),
+        widgets.map((w) => ({ id: w.id, title: w.title, gridW: w.position.w })),
         datasetName,
         `${datasetName} — Dashboard Report`,
         filteredRows
@@ -147,6 +129,7 @@ export default function DashboardGrid({
           rowHeight={ROW_HEIGHT}
           onLayoutChange={handleLayoutChange}
           draggableHandle=".widget-drag-handle"
+          cancel=".widget-toolbar"
           isDraggable={editable}
           isResizable={editable}
           compactType="vertical"
@@ -158,8 +141,8 @@ export default function DashboardGrid({
                 widget={widget}
                 rows={filteredRows}
                 onRemove={editable ? () => handleRemoveWidget(widget.id) : undefined}
+                onChangeType={editable ? (newType) => handleChangeWidgetType(widget.id, newType) : undefined}
                 onDrillDown={onDrillDown}
-                onToggleLabels={editable ? () => handleToggleLabels(widget.id) : undefined}
               />
             </div>
           ))}
