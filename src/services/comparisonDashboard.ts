@@ -28,18 +28,24 @@ export type PanelChartKind =
   | "grouped_area"
   | "pie"
   | "pie_detailed"
+  | "pie3d"
   | "bar_detailed"
+  | "bar3d"
+  | "wave"
   | "category_scatter"
   | "histogram";
 
 export const PANEL_CHART_KINDS: { kind: PanelChartKind; label: string; description: string }[] = [
   { kind: "grouped_bar", label: "Grouped bar", description: "Categories side-by-side per period" },
   { kind: "bar_detailed", label: "Bar (values + %)", description: "Bars plus a value/percentage list" },
+  { kind: "bar3d", label: "Bar (3D)", description: "Period × category as a 3D bar grid" },
   { kind: "stacked_bar", label: "Stacked bar", description: "Categories stacked per period" },
   { kind: "grouped_line", label: "Grouped line", description: "One trend line per category" },
   { kind: "grouped_area", label: "Grouped area", description: "Filled trend line per category" },
   { kind: "pie", label: "Pie (share)", description: "Each category's overall share" },
   { kind: "pie_detailed", label: "Pie (values + %)", description: "Pie plus a value/percentage list" },
+  { kind: "pie3d", label: "Pie (3D)", description: "Each category's share, in 3D" },
+  { kind: "wave", label: "Wave (CBE's share)", description: "CBE's share of the total as a liquid fill" },
   { kind: "category_scatter", label: "Scatter (A vs B)", description: "One category plotted against the other" },
   { kind: "histogram", label: "Histogram", description: "Distribution of all values" },
 ];
@@ -78,8 +84,14 @@ function buildComparisonWidgetSpec(kind: PanelChartKind, xField: string, section
       return { type: "pie", config: { category: "Category", value: "Value", agg: "sum", filters, comparisonKey } };
     case "pie_detailed":
       return { type: "pie_detailed", config: { category: "Category", value: "Value", agg: "sum", listPosition: "right", filters, comparisonKey } };
+    case "pie3d":
+      return { type: "pie3d", config: { category: "Category", value: "Value", agg: "sum", filters, comparisonKey } };
     case "bar_detailed":
       return { type: "bar_detailed", config: { x: "Category", y: "Value", agg: "sum", listPosition: "right", showLabels: true, filters, comparisonKey } };
+    case "bar3d":
+      return { type: "bar3d", config: { x: xField, y: "Value", seriesField: "Category", agg: "sum", filters, comparisonKey } };
+    case "wave":
+      return { type: "wave", config: { field: "Value", shareOf: { field: "Category", value: "CBE" }, filters, comparisonKey } };
     case "category_scatter":
       return { type: "category_scatter", config: { x: xField, y: "Value", seriesField: "Category", filters, comparisonKey } };
     case "histogram":
@@ -115,10 +127,14 @@ export function generatePanelComparisonWidgets(rows: DataRow[], kind?: PanelChar
     for (const metric of metricsInSection) {
       const spec = buildComparisonWidgetSpec(effectiveKind, xField, section, metric);
       // "Detailed" bar/pie carry a value+percentage list alongside the
-      // chart, so they get extra width to keep both legible instead of
-      // squeezing the list down to nothing.
+      // chart, and the 3D types need real viewport room to read, so
+      // both get extra width instead of squeezing into the plain-chart
+      // default.
       const isDetailed = spec.type === "bar_detailed" || spec.type === "pie_detailed";
-      widgets.push({ type: spec.type, title: `${section} — ${metric}`, config: spec.config, position: place(isDetailed ? 8 : 4, 5) });
+      const is3D = spec.type === "bar3d" || spec.type === "pie3d";
+      const isWave = spec.type === "wave";
+      const width = isDetailed || is3D ? 8 : isWave ? 4 : 4;
+      widgets.push({ type: spec.type, title: `${section} — ${metric}`, config: spec.config, position: place(width, 5) });
     }
   }
 
