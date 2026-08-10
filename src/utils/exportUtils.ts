@@ -45,17 +45,51 @@ async function ensureFontsReady(): Promise<void> {
   await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 }
 
-async function screenshotNode(node: HTMLElement): Promise<{ buffer: ArrayBuffer; ratio: number }> {
+/** Core capture logic shared by every export path (PNG button, PDF,
+ * Word) — see the comments above for why this clones into an
+ * untransformed off-screen container and manually restores canvas
+ * pixels rather than just calling html2canvas(node) directly. */
+async function captureNodeAsCanvas(node: HTMLElement): Promise<HTMLCanvasElement> {
   await ensureFontsReady();
-  const canvas = await html2canvas(node, {
-    backgroundColor: getComputedStyle(document.body).backgroundColor || "#ffffff",
-    // 3x device-pixel density (previously 2x) — the difference between
-    // "readable at a glance" and "blurry once placed into a Word/PDF
-    // page" for chart labels, axis numbers, and legends specifically,
-    // since those get shrunk down again once embedded in the document.
-    scale: 3,
-    useCORS: true,
+
+  const rect = node.getBoundingClientRect();
+  const clone = node.cloneNode(true) as HTMLElement;
+
+  const originalCanvases = node.querySelectorAll("canvas");
+  const cloneCanvases = clone.querySelectorAll("canvas");
+  originalCanvases.forEach((src, i) => {
+    const dest = cloneCanvases[i] as HTMLCanvasElement | undefined;
+    if (!dest) return;
+    dest.width = src.width;
+    dest.height = src.height;
+    dest.getContext("2d")?.drawImage(src, 0, 0);
   });
+
+  clone.querySelectorAll<HTMLElement>(".widget-toolbar").forEach((el) => { el.style.opacity = "0"; });
+
+  const wrapper = document.createElement("div");
+  wrapper.style.cssText = `position:fixed; top:0; left:-99999px; z-index:-1; width:${rect.width}px; height:${rect.height}px; pointer-events:none;`;
+  wrapper.appendChild(clone);
+  document.body.appendChild(wrapper);
+
+  try {
+    return await html2canvas(clone, {
+      backgroundColor: getComputedStyle(document.body).backgroundColor || "#ffffff",
+      scale: 2,
+      useCORS: true,
+      scrollX: 0,
+      scrollY: 0,
+    });
+  } finally {
+    document.body.removeChild(wrapper);
+  }
+}
+
+/** Screenshots a node and returns it as an ArrayBuffer — what the Word
+ * export needs for docx.js's ImageRun. See captureNodeAsCanvas for the
+ * actual capture logic (shared with the PNG/PDF exports below). */
+async function screenshotNode(node: HTMLElement): Promise<{ buffer: ArrayBuffer; ratio: number }> {
+  const canvas = await captureNodeAsCanvas(node);
   const dataUrl = canvas.toDataURL("image/png");
   const buffer = await (await fetch(dataUrl)).arrayBuffer();
   return { buffer, ratio: canvas.width / canvas.height };
@@ -64,12 +98,7 @@ async function screenshotNode(node: HTMLElement): Promise<{ buffer: ArrayBuffer;
 /** Export a single DOM node (a widget card, or the whole dashboard grid)
  * as a PNG image. */
 export async function exportNodeToPng(node: HTMLElement, filename: string) {
-  await ensureFontsReady();
-  const canvas = await html2canvas(node, {
-    backgroundColor: getComputedStyle(document.body).backgroundColor || "#ffffff",
-    scale: 3,
-    useCORS: true,
-  });
+  const canvas = await captureNodeAsCanvas(node);
   const link = document.createElement("a");
   link.download = `${filename}.png`;
   link.href = canvas.toDataURL("image/png");
@@ -81,18 +110,10 @@ export async function exportNodeToPng(node: HTMLElement, filename: string) {
  * a styled brand-purple title and gold accent rule instead of jsPDF's
  * plain default black text. */
 export async function exportNodeToPdf(node: HTMLElement, filename: string, title?: string) {
-  await ensureFontsReady();
-  const canvas = await html2canvas(node, {
-    backgroundColor: getComputedStyle(document.body).backgroundColor || "#ffffff",
-    scale: 3,
-    useCORS: true,
-  });
+  const canvas = await captureNodeAsCanvas(node);
 
   const imgData = canvas.toDataURL("image/png");
-  // "NONE" keeps the PNG's full pixel data — jsPDF's own default
-  // compression on addImage was softening fine chart lines/labels
-  // slightly at this higher scale.
-  const pdf = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4", compress: false });
+  const pdf = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
   const pageWidth = pdf.internal.pageSize.getWidth();
   const pageHeight = pdf.internal.pageSize.getHeight();
 
@@ -107,35 +128,28 @@ export async function exportNodeToPdf(node: HTMLElement, filename: string, title
     pdf.setFont("helvetica", "bold");
     pdf.setFontSize(18);
     pdf.setTextColor(...BRAND_PURPLE_RGB);
-    // Wrap instead of letting a long dataset name run off the page edge
-    // (or under the export button chrome that used to sit there) — this
-    // is what was reading as "header text not fully visible" in PDF
-    // exports.
-    const titleLines = pdf.splitTextToSize(title, pageWidth - 48);
-    pdf.text(titleLines, 24, 34);
-    const titleBlockHeight = titleLines.length * 20;
+    pdf.text(title, 24, 34);
 
     pdf.setFont("helvetica", "normal");
     pdf.setFontSize(9);
     pdf.setTextColor(120, 120, 120);
-    pdf.text(`Exported ${new Date().toLocaleString()}`, 24, 34 + titleBlockHeight - 6);
+    pdf.text(`Exported ${new Date().toLocaleString()}`, 24, 48);
 
     // Thin gold accent rule under the title block, echoing the site's header.
     pdf.setDrawColor(...BRAND_GOLD_RGB);
     pdf.setLineWidth(1.5);
-    const ruleY = 34 + titleBlockHeight + 4;
-    pdf.line(24, ruleY, pageWidth - 24, ruleY);
+    pdf.line(24, 56, pageWidth - 24, 56);
 
-    position = ruleY + 12;
+    position = 68;
   }
 
-  pdf.addImage(imgData, "PNG", 20, position, renderWidth, renderHeight, undefined, "NONE");
+  pdf.addImage(imgData, "PNG", 20, position, renderWidth, renderHeight);
   heightLeft -= pageHeight - position;
 
   while (heightLeft > 0) {
     pdf.addPage();
     position = heightLeft - renderHeight + 20;
-    pdf.addImage(imgData, "PNG", 20, position, renderWidth, renderHeight, undefined, "NONE");
+    pdf.addImage(imgData, "PNG", 20, position, renderWidth, renderHeight);
     heightLeft -= pageHeight;
   }
 
@@ -201,14 +215,13 @@ export async function exportDashboardToWord(
 
   // --- One image per widget, each with its own heading ---
   for (const widget of widgets) {
-    // Deliberately targets WidgetCard's own root element (marked with
-    // data-widget-capture), NOT the react-grid-layout grid-item that wraps
-    // it — that wrapper is positioned via a CSS transform, and html2canvas
-    // has a known quirk where capturing a transformed element crops a few
-    // pixels off the top of its content (this is what caused widget titles
-    // to render half-cut in earlier exports). The per-widget PNG button
-    // was never affected because it already targets this same safe inner
-    // element via WidgetCard's own ref.
+    // Targets WidgetCard's own root element (marked with
+    // data-widget-capture), not the react-grid-layout item that
+    // positions it. screenshotNode() (see above) clones this node into
+    // an untransformed off-screen container before capturing it, which
+    // is what actually prevents the widget header from being clipped —
+    // capturing an element with a transformed ancestor in place, even
+    // indirectly, is what caused that in earlier exports.
     const node = gridNode.querySelector<HTMLElement>(`[data-widget-capture="${widget.id}"]`);
     if (!node) continue;
 
