@@ -14,10 +14,14 @@ import type { Widget, WidgetType } from "@/types";
 export const SWITCHABLE_CHART_TYPES: { type: WidgetType; label: string }[] = [
   { type: "bar", label: "Bar" },
   { type: "bar_detailed", label: "Bar (values + %)" },
+  { type: "bar3d", label: "Bar (3D)" },
+  { type: "bar_line_combo", label: "Bar + line (Pareto)" },
   { type: "line", label: "Line" },
   { type: "area", label: "Area" },
   { type: "pie", label: "Pie" },
   { type: "pie_detailed", label: "Pie (values + %)" },
+  { type: "pie3d", label: "Pie (3D)" },
+  { type: "wave", label: "Wave (liquid fill)" },
   { type: "scatter", label: "Scatter" },
   { type: "histogram", label: "Histogram" },
   { type: "gauge", label: "Gauge" },
@@ -82,6 +86,18 @@ export function remapWidgetConfig(widget: Widget, newType: WidgetType): Widget {
       break;
     case "bar_detailed":
       config = { x: xField, y: yField, agg, listPosition: widget.config?.listPosition ?? "right", showLabels: widget.config?.showLabels ?? true, ...carryOver };
+      break;
+    case "bar3d":
+      config = { x: xField, y: yField, seriesField: seriesField ?? xField, agg, ...carryOver };
+      break;
+    case "bar_line_combo":
+      config = { x: xField, y: yField, agg, barStyle: widget.config?.barStyle, ...carryOver };
+      break;
+    case "pie3d":
+      config = { category: xField, value: yField, agg, ...carryOver };
+      break;
+    case "wave":
+      config = { field: yField ?? xField, agg: agg === "sum" ? "avg" : agg, max: widget.config?.max, ...carryOver };
       break;
     case "bar":
       config = { x: xField, y: yField, agg, showLabels: !!widget.config?.showLabels, ...carryOver };
