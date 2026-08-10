@@ -79,7 +79,7 @@ function buildComparisonWidgetSpec(kind: PanelChartKind, xField: string, section
     case "pie_detailed":
       return { type: "pie_detailed", config: { category: "Category", value: "Value", agg: "sum", listPosition: "right", filters, comparisonKey } };
     case "bar_detailed":
-      return { type: "bar_detailed", config: { x: "Category", y: "Value", agg: "sum", listPosition: "right", filters, comparisonKey } };
+      return { type: "bar_detailed", config: { x: "Category", y: "Value", agg: "sum", listPosition: "right", showLabels: true, filters, comparisonKey } };
     case "category_scatter":
       return { type: "category_scatter", config: { x: xField, y: "Value", seriesField: "Category", filters, comparisonKey } };
     case "histogram":
