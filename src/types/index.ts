@@ -26,7 +26,12 @@ export type WidgetType =
   // side-by-side with a value + percentage list (config.listPosition:
   // "left" | "right", default "right") so exact numbers are always
   // readable, not just implied by bar height / slice angle.
-  | "bar_detailed" | "pie_detailed";
+  | "bar_detailed" | "pie_detailed"
+  // Bar + line combined (Pareto-style: bars + cumulative % line).
+  | "bar_line_combo"
+  // 3D bar (echarts-gl) and 3D pie (echarts-gl, via a parametric-surface
+  // recipe), and a liquid "wave" fill for a single ratio/percentage.
+  | "bar3d" | "pie3d" | "wave";
 
 export interface WidgetPosition {
   x: number;
