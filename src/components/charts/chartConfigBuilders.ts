@@ -48,9 +48,39 @@ export function groupAndAgg(rows: DataRow[], groupField: string, valueField?: st
 
 const baseTooltip = { trigger: "axis" as const, backgroundColor: "rgba(17,24,39,0.92)", borderWidth: 0, textStyle: { color: "#fff" } };
 const baseGrid = { left: 48, right: 24, top: 32, bottom: 40, containLabel: true };
-// Bar-family charts render a value/percent label above each bar, which
-// needs a bit more headroom above the plot area than the default grid.
+// Bar-family charts render a value/percent label above each bar when
+// that's turned on (config.showLabels), which needs a bit more headroom
+// above the plot area than the default grid.
 const barGrid = { ...baseGrid, top: 44 };
+
+/** The value+percent "chip" shown above/inside a bar when the person
+ * turns on config.showLabels — bold value, smaller muted percent
+ * underneath, on a soft floating pill so it stays readable over any bar
+ * color (including CBE gold) or chart theme. Not shown by default; this
+ * is what draws when a bar/grouped-bar widget has labels toggled on. */
+function attractiveValueLabel(stacked: boolean) {
+  return {
+    show: true,
+    position: stacked ? ("inside" as const) : ("top" as const),
+    formatter: (p: any) =>
+      p?.data && typeof p.data === "object"
+        ? `{val|${Number(p.data.value).toLocaleString()}}\n{pct|${Number(p.data.pct).toFixed(1)}%}`
+        : "",
+    rich: {
+      val: { fontSize: 11, fontWeight: 700, lineHeight: 14, color: stacked ? "#ffffff" : "#111827" },
+      pct: { fontSize: 9, fontWeight: 500, lineHeight: 12, color: stacked ? "rgba(255,255,255,0.85)" : "#6b7280" },
+    },
+    ...(stacked
+      ? {}
+      : {
+          backgroundColor: "rgba(255,255,255,0.94)",
+          borderRadius: 5,
+          padding: [3, 6] as [number, number],
+          shadowBlur: 6,
+          shadowColor: "rgba(15,23,42,0.12)",
+        }),
+  };
+}
 
 /** Applies optional widget-level prefilters (config.filters: [{field,
  * value}]) before any aggregation. Lets a single dataset's rows be
@@ -79,10 +109,11 @@ export function buildBarOption(rows: DataRow[], config: any) {
   const scoped = applyConfigFilters(rows, config);
   const data = groupAndAgg(scoped, config.x, config.y, config.agg ?? "sum").slice(0, 15);
   const total = data.reduce((sum, d) => sum + d.value, 0) || 1;
+  const showLabels = !!config.showLabels;
   return {
     color: PALETTE,
     tooltip: baseTooltip,
-    grid: barGrid,
+    grid: showLabels ? barGrid : baseGrid,
     xAxis: { type: "category", data: data.map((d) => d.key), axisLabel: { rotate: data.length > 6 ? 30 : 0 } },
     yAxis: { type: "value" },
     series: [{
@@ -92,15 +123,10 @@ export function buildBarOption(rows: DataRow[], config: any) {
         pct: (d.value / total) * 100,
         itemStyle: { borderRadius: [4, 4, 0, 0], ...cbeColorOverride(d.key) },
       })),
-      // Actual value + share-of-total printed right above each bar, so
-      // the number isn't only implied by bar height.
-      label: {
-        show: true,
-        position: "top",
-        fontSize: 10,
-        color: "#6b7280",
-        formatter: (p: any) => `${Number(p.data.value).toLocaleString()}\n${Number(p.data.pct).toFixed(1)}%`,
-      },
+      // Off by default — plain bar chart stays clean. Turned on via the
+      // "%" toggle on the widget card, which prints the actual value and
+      // its share of the total right on the bar.
+      label: showLabels ? attractiveValueLabel(false) : { show: false },
       barMaxWidth: 42,
     }],
   };
@@ -140,7 +166,16 @@ export function buildPieOption(rows: DataRow[], config: any) {
       itemStyle: { borderRadius: 6, borderColor: "#fff", borderWidth: 2 },
       // Name, actual value, and percent share — not just percent — so
       // the real number is always visible on the slice itself too.
-      label: { formatter: "{b}\n{c} ({d}%)", fontSize: 11 },
+      // Rich tokens give the value visual weight without hardcoding a
+      // text color, so it stays legible in both light and dark theme.
+      label: {
+        formatter: "{name|{b}}\n{val|{c}}  {pct|({d}%)}",
+        rich: {
+          name: { fontSize: 11, fontWeight: 600, lineHeight: 15 },
+          val: { fontSize: 12, fontWeight: 700, lineHeight: 16 },
+          pct: { fontSize: 10, lineHeight: 14 },
+        },
+      },
     }],
   };
 }
@@ -339,22 +374,18 @@ export function buildGroupedBarOption(rows: DataRow[], config: any) {
       return { value: v, pct: (v / totalsByX[xi]) * 100 };
     });
     const seriesColor = isCbeLabel(sv) ? CBE_GOLD : PALETTE[i % PALETTE.length];
+    const showLabels = !!config.showLabels;
     return {
       name: sv, type: "bar", data,
       itemStyle: {
         borderRadius: config.stacked ? [0, 0, 0, 0] : [4, 4, 0, 0],
         color: seriesColor,
       },
-      // Actual value + this series' share of that x-group's total,
-      // printed on the bar itself — e.g. CBE's number and its % of
-      // CBE+Industry for that period, right on the CBE bar.
-      label: {
-        show: true,
-        position: config.stacked ? "inside" : "top",
-        fontSize: 10,
-        color: config.stacked ? "#fff" : "#6b7280",
-        formatter: (p: any) => (p.data ? `${Number(p.data.value).toLocaleString()}\n${Number(p.data.pct).toFixed(1)}%` : ""),
-      },
+      // Off by default — turned on via the "%" toggle on the widget
+      // card. When on: actual value + this series' share of that
+      // x-group's total (e.g. CBE's number and its % of CBE+Industry
+      // for that period), printed right on the bar.
+      label: showLabels ? attractiveValueLabel(!!config.stacked) : { show: false },
       barMaxWidth: 28,
       ...(config.stacked ? { stack: "total" } : {}),
     };
@@ -364,7 +395,7 @@ export function buildGroupedBarOption(rows: DataRow[], config: any) {
     color: PALETTE,
     tooltip: { ...baseTooltip, axisPointer: { type: "shadow" } },
     legend: { bottom: 0, textStyle: { fontSize: 11 } },
-    grid: { ...barGrid, bottom: 56 },
+    grid: config.showLabels ? { ...barGrid, bottom: 56 } : { ...baseGrid, bottom: 56 },
     xAxis: { type: "category", data: xValues, axisLabel: { rotate: xValues.length > 6 ? 30 : 0 } },
     yAxis: { type: "value" },
     series,
@@ -454,7 +485,8 @@ export function computeAutoFitSize(widget: Widget, rows: DataRow[]): { w: number
       const n = groupAndAgg(scoped, config.x, config.y, config.agg ?? "sum").slice(0, 15).length;
       let h = 5;
       if (n > 6) h += 1; // rotated x-axis labels need more vertical room
-      if (n > 10) h += 1; // ...and on-bar value+% labels need a bit more still
+      if (n > 10) h += 1;
+      if (config.showLabels) h += 1; // on-bar value+% chips need headroom too
       let w = widget.type === "bar_detailed" ? 9 : 6;
       if (n > 8) w = Math.min(12, w + 2);
       return { w, h };
@@ -476,6 +508,7 @@ export function computeAutoFitSize(widget: Widget, rows: DataRow[]): { w: number
       let h = 5;
       if (xCount > 6) h += 1;
       if (xCount > 10) h += 1;
+      if (widget.type === "grouped_bar" && config.showLabels) h += 1;
       let w = 6;
       const bars = xCount * seriesCount;
       if (bars > 12) w = 8;
