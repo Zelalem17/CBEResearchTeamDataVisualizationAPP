@@ -90,6 +90,11 @@ export default function DashboardGrid({
 
   const handleRemoveWidget = (id: string) => onWidgetsChange(widgets.filter((w) => w.id !== id));
 
+  const handleToggleLabels = (id: string) =>
+    onWidgetsChange(
+      widgets.map((w) => (w.id === id ? { ...w, config: { ...w.config, showLabels: !w.config?.showLabels } } : w))
+    );
+
   const handleExportPdf = async () => {
     if (gridRef.current) await exportNodeToPdf(gridRef.current, datasetName, `${datasetName} — Dashboard`);
   };
@@ -154,6 +159,7 @@ export default function DashboardGrid({
                 rows={filteredRows}
                 onRemove={editable ? () => handleRemoveWidget(widget.id) : undefined}
                 onDrillDown={onDrillDown}
+                onToggleLabels={editable ? () => handleToggleLabels(widget.id) : undefined}
               />
             </div>
           ))}
