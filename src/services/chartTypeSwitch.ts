@@ -16,6 +16,7 @@ export const SWITCHABLE_CHART_TYPES: { type: WidgetType; label: string }[] = [
   { type: "bar_detailed", label: "Bar (values + %)" },
   { type: "bar3d", label: "Bar (3D)" },
   { type: "bar_line_combo", label: "Bar + line (Pareto)" },
+  { type: "bar_line_series", label: "Bar + line (compare)" },
   { type: "line", label: "Line" },
   { type: "area", label: "Area" },
   { type: "pie", label: "Pie" },
@@ -29,7 +30,6 @@ export const SWITCHABLE_CHART_TYPES: { type: WidgetType; label: string }[] = [
   { type: "grouped_line", label: "Grouped line" },
   { type: "category_scatter", label: "Scatter (A vs B)" },
 ];
-
 const SWITCHABLE_TYPE_SET = new Set(SWITCHABLE_CHART_TYPES.map((t) => t.type));
 
 export function isSwitchableChartType(type: WidgetType): boolean {
@@ -92,6 +92,9 @@ export function remapWidgetConfig(widget: Widget, newType: WidgetType): Widget {
       break;
     case "bar_line_combo":
       config = { x: xField, y: yField, agg, barStyle: widget.config?.barStyle, ...carryOver };
+      break;
+    case "bar_line_series":
+      config = { x: xField, y: yField, seriesField: seriesField ?? xField, agg, showLabels: !!widget.config?.showLabels, symbolShape: widget.config?.symbolShape, barStyle: widget.config?.barStyle, ...carryOver };
       break;
     case "pie3d":
       config = { category: xField, value: yField, agg, ...carryOver };
