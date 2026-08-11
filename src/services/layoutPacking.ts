@@ -25,7 +25,7 @@ const GRID_COLS = 12;
 // the bottom, below the charts that summarize the same data.
 const TYPE_RANK: Record<string, number> = {
   kpi: 0, gauge: 1, wave: 2,
-  bar: 10, bar_detailed: 11, bar3d: 12, bar_line_combo: 13, grouped_bar: 14,
+  bar: 10, bar_detailed: 11, bar3d: 12, bar_line_combo: 13, bar_line_series: 14, grouped_bar: 15,
   line: 20, area: 21, grouped_line: 22,
   pie: 30, pie_detailed: 31, pie3d: 32,
   scatter: 40, category_scatter: 41,
