@@ -29,6 +29,9 @@ export type WidgetType =
   | "bar_detailed" | "pie_detailed"
   // Bar + line combined (Pareto-style: bars + cumulative % line).
   | "bar_line_combo"
+  // Bar + line combined as two actual data series (e.g. CBE as bars,
+  // Industry as a line) rather than one field's cumulative %.
+  | "bar_line_series"
   // 3D bar (echarts-gl) and 3D pie (echarts-gl, via a parametric-surface
   // recipe), and a liquid "wave" fill for a single ratio/percentage.
   | "bar3d" | "pie3d" | "wave";
