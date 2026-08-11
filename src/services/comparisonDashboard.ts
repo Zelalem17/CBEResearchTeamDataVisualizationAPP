@@ -32,6 +32,7 @@ export type PanelChartKind =
   | "pie3d"
   | "bar_detailed"
   | "bar3d"
+  | "bar_line_series"
   | "wave"
   | "category_scatter"
   | "histogram";
@@ -40,6 +41,7 @@ export const PANEL_CHART_KINDS: { kind: PanelChartKind; label: string; descripti
   { kind: "grouped_bar", label: "Grouped bar", description: "Categories side-by-side per period" },
   { kind: "bar_detailed", label: "Bar (values + %)", description: "Bars plus a value/percentage list" },
   { kind: "bar3d", label: "Bar (3D)", description: "Period × category as a 3D bar grid" },
+  { kind: "bar_line_series", label: "Bar + line (compare)", description: "CBE as bars, the rest as lines" },
   { kind: "stacked_bar", label: "Stacked bar", description: "Categories stacked per period" },
   { kind: "grouped_line", label: "Grouped line", description: "One trend line per category" },
   { kind: "grouped_area", label: "Grouped area", description: "Filled trend line per category" },
@@ -91,6 +93,8 @@ function buildComparisonWidgetSpec(kind: PanelChartKind, xField: string, section
       return { type: "bar_detailed", config: { x: "Category", y: "Value", agg: "sum", listPosition: "right", showLabels: true, filters, comparisonKey } };
     case "bar3d":
       return { type: "bar3d", config: { x: xField, y: "Value", seriesField: "Category", agg: "sum", filters, comparisonKey } };
+    case "bar_line_series":
+      return { type: "bar_line_series", config: { x: xField, y: "Value", seriesField: "Category", agg: "sum", filters, comparisonKey } };
     case "wave":
       return { type: "wave", config: { field: "Value", shareOf: { field: "Category", value: "CBE" }, filters, comparisonKey } };
     case "category_scatter":
