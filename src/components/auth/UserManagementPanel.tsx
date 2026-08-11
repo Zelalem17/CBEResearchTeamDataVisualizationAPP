@@ -1,11 +1,13 @@
 import { useState } from "react";
-import { X, UserPlus, Copy, Check, ShieldCheck, Eye } from "lucide-react";
+import { X, UserPlus, Copy, Check, ShieldCheck, Eye, PenLine } from "lucide-react";
 import { sha256Hex } from "@/services/auth";
 import { USERS } from "@/data/users";
 
 interface UserManagementPanelProps {
   onClose: () => void;
 }
+
+const ROLE_ICON = { admin: ShieldCheck, editor: PenLine, viewer: Eye } as const;
 
 /** Admin-only panel for creating researcher accounts. Everything here
  * runs in the browser — hashing the chosen password, building the
@@ -17,7 +19,7 @@ export default function UserManagementPanel({ onClose }: UserManagementPanelProp
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
-  const [role, setRole] = useState<"admin" | "viewer">("viewer");
+  const [role, setRole] = useState<"admin" | "editor" | "viewer">("editor");
   const [snippet, setSnippet] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -61,15 +63,18 @@ export default function UserManagementPanel({ onClose }: UserManagementPanelProp
             <p className="text-xs text-gray-400">No named accounts yet — only the master admin login works.</p>
           ) : (
             <div className="space-y-1 max-h-32 overflow-y-auto">
-              {USERS.map((u) => (
-                <div key={u.username} className="flex items-center justify-between text-xs px-2 py-1.5 rounded bg-gray-50 dark:bg-gray-800">
-                  <span className="font-medium text-gray-700 dark:text-gray-200">{u.displayName || u.username}</span>
-                  <span className="flex items-center gap-1 text-gray-400">
-                    {u.role === "admin" ? <ShieldCheck size={11} /> : <Eye size={11} />}
-                    {u.role}
-                  </span>
-                </div>
-              ))}
+              {USERS.map((u) => {
+                const RoleIcon = ROLE_ICON[u.role];
+                return (
+                  <div key={u.username} className="flex items-center justify-between text-xs px-2 py-1.5 rounded bg-gray-50 dark:bg-gray-800">
+                    <span className="font-medium text-gray-700 dark:text-gray-200">{u.displayName || u.username}</span>
+                    <span className="flex items-center gap-1 text-gray-400">
+                      <RoleIcon size={11} />
+                      {u.role}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
           )}
           <p className="text-[11px] text-gray-400 mt-1.5">
@@ -99,9 +104,10 @@ export default function UserManagementPanel({ onClose }: UserManagementPanelProp
             value={password}
             onChange={(e) => setPassword(e.target.value)}
           />
-          <select className="input w-full text-sm" value={role} onChange={(e) => setRole(e.target.value as "admin" | "viewer")}>
-            <option value="viewer">Viewer — read-only</option>
-            <option value="admin">Admin — full access</option>
+          <select className="input w-full text-sm" value={role} onChange={(e) => setRole(e.target.value as "admin" | "editor" | "viewer")}>
+            <option value="viewer">Viewer — read-only (view, filter, export)</option>
+            <option value="editor">Editor — full data access (upload, edit, rearrange), no user management</option>
+            <option value="admin">Admin — everything, including Manage users</option>
           </select>
           <button
             onClick={handleGenerate}
