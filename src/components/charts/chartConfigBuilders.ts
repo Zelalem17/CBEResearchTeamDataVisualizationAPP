@@ -84,7 +84,30 @@ export function groupAndAgg(rows: DataRow[], groupField: string, valueField?: st
     }
     return { key, value: Math.round(value * 100) / 100 };
   });
-  return entries.sort((a, b) => b.value - a.value);
+  // CBE always comes first — this is CBE's own app, so wherever CBE
+  // appears alongside a comparison category (Industry, a competitor,
+  // etc.) it leads every bar/pie/list/legend rather than being sorted
+  // in purely by value. Everything else still sorts by value descending.
+  return entries.sort((a, b) => {
+    const aCbe = isCbeLabel(a.key);
+    const bCbe = isCbeLabel(b.key);
+    if (aCbe !== bCbe) return aCbe ? -1 : 1;
+    return b.value - a.value;
+  });
+}
+
+/** Sorts a list of series/category names so CBE always leads, otherwise
+ * preserving relative order — the series-array equivalent of
+ * groupAndAgg's CBE-first sort, for chart builders that derive their
+ * category list from a plain Set rather than groupAndAgg (grouped bar,
+ * grouped line, category scatter, 3D bar). */
+function sortCbeFirst(names: string[]): string[] {
+  return [...names].sort((a, b) => {
+    const aCbe = isCbeLabel(a);
+    const bCbe = isCbeLabel(b);
+    if (aCbe !== bCbe) return aCbe ? -1 : 1;
+    return 0;
+  });
 }
 
 /** Lightens a hex color toward white by `amount` (0–1) — used to build
@@ -319,7 +342,7 @@ export function buildCategoryScatterOption(rows: DataRow[], config: any) {
   const xField = config.x;
   const valueField = config.y ?? "Value";
 
-  const seriesValues = Array.from(new Set(scoped.map((r) => String(r[seriesField] ?? "—"))));
+  const seriesValues = sortCbeFirst(Array.from(new Set(scoped.map((r) => String(r[seriesField] ?? "—")))));
   if (seriesValues.length < 2) {
     return {
       title: { text: "Need at least 2 categories to compare", left: "center", top: "middle", textStyle: { fontSize: 12, color: "#94a3b8" } },
@@ -551,6 +574,62 @@ export function buildBarLineComboOption(rows: DataRow[], config: any) {
   };
 }
 
+/** Bar + line combined as two actual data series over a shared x field
+ * (e.g. Period) — the first category (CBE, since CBE always sorts first
+ * — see sortCbeFirst) renders as bars, every other category (Industry,
+ * a second competitor, etc.) renders as a line drawn over them, so CBE
+ * reads as the primary series and the rest as trend comparisons against
+ * it, all on one shared axis. This differs from buildBarLineComboOption
+ * (the Pareto chart), which is one field's own bars plus its own
+ * cumulative-% line rather than two distinct categories. */
+export function buildBarLineSeriesOption(rows: DataRow[], config: any) {
+  const scoped = applyConfigFilters(rows, config);
+  const xField = config.x;
+  const seriesField = config.seriesField;
+  const valueField = config.y;
+  const agg = config.agg ?? "sum";
+
+  const xValues = Array.from(new Set(scoped.map((r) => String(r[xField] ?? "—")))).sort();
+  const seriesValues = sortCbeFirst(Array.from(new Set(scoped.map((r) => String(r[seriesField] ?? "—")))));
+  const colorMap = assignSeriesColors(seriesValues);
+  const showLabels = !!config.showLabels;
+  const symbol = config.symbolShape ?? "circle";
+
+  const series = seriesValues.map((sv, idx) => {
+    const data = xValues.map((xv) => {
+      const matching = scoped.filter((r) => String(r[xField] ?? "—") === xv && String(r[seriesField] ?? "—") === sv);
+      const vals = matching.map((r) => Number(r[valueField])).filter(Number.isFinite);
+      if (!vals.length) return null;
+      return Math.round(aggValues(vals, agg) * 10000) / 10000;
+    });
+    const color = colorMap[sv];
+    if (idx === 0) {
+      return {
+        name: sv, type: "bar", data,
+        itemStyle: barVisualStyle(color, config.barStyle),
+        label: showLabels ? attractiveValueLabel(false) : { show: false },
+        barMaxWidth: 34,
+      };
+    }
+    return {
+      name: sv, type: "line", data, smooth: true, symbol, symbolSize: symbol === "none" ? 0 : 7,
+      lineStyle: { width: 2.5, color }, itemStyle: { color }, connectNulls: true,
+      label: showLabels
+        ? { show: true, position: "top", fontSize: 9, fontWeight: 600, color, formatter: (p: any) => (p.value == null ? "" : Number(p.value).toLocaleString()) }
+        : { show: false },
+    };
+  });
+
+  return {
+    tooltip: { ...baseTooltip, axisPointer: { type: "cross" } },
+    legend: { bottom: 0, textStyle: { fontSize: 11 } },
+    grid: showLabels ? { ...barGrid, bottom: 56 } : { ...baseGrid, bottom: 56 },
+    xAxis: { type: "category", data: xValues, axisLabel: { rotate: xValues.length > 6 ? 30 : 0 } },
+    yAxis: { type: "value" },
+    series,
+  };
+}
+
 /** 3D bar chart (needs `echarts-gl`, registered globally in
  * ChartRenderer.tsx): x category × comparison category (e.g. Period ×
  * CBE/Industry), with bar height as the value — the natural use of a
@@ -564,7 +643,7 @@ export function buildBar3DOption(rows: DataRow[], config: any) {
   const agg = config.agg ?? "sum";
 
   const xValues = Array.from(new Set(scoped.map((r) => String(r[xField] ?? "—")))).sort();
-  const yValues = Array.from(new Set(scoped.map((r) => String(r[seriesField] ?? "—"))));
+  const yValues = sortCbeFirst(Array.from(new Set(scoped.map((r) => String(r[seriesField] ?? "—")))));
 
   const data: [number, number, number][] = [];
   let maxVal = 0;
@@ -693,7 +772,7 @@ export function buildGroupedBarOption(rows: DataRow[], config: any) {
   const agg = config.agg ?? "sum";
 
   const xValues = Array.from(new Set(scoped.map((r) => String(r[xField] ?? "—")))).sort();
-  const seriesValues = Array.from(new Set(scoped.map((r) => String(r[seriesField] ?? "—"))));
+  const seriesValues = sortCbeFirst(Array.from(new Set(scoped.map((r) => String(r[seriesField] ?? "—")))));
 
   // Raw value matrix first, so we can compute each bar's share of its
   // own x-group's total (e.g. CBE's % of CBE+Industry for that period)
@@ -753,7 +832,7 @@ export function buildGroupedLineOption(rows: DataRow[], config: any) {
   const agg = config.agg ?? "sum";
 
   const xValues = Array.from(new Set(scoped.map((r) => String(r[xField] ?? "—")))).sort();
-  const seriesValues = Array.from(new Set(scoped.map((r) => String(r[seriesField] ?? "—"))));
+  const seriesValues = sortCbeFirst(Array.from(new Set(scoped.map((r) => String(r[seriesField] ?? "—")))));
 
   const symbol = config.symbolShape ?? "circle";
   const showLabels = !!config.showLabels;
@@ -850,14 +929,15 @@ export function computeAutoFitSize(widget: Widget, rows: DataRow[]): { w: number
       return { w, h };
     }
     case "grouped_bar":
-    case "grouped_line": {
+    case "grouped_line":
+    case "bar_line_series": {
       if (!config.x || !config.seriesField) return null;
       const xCount = new Set(scoped.map((r) => String(r[config.x] ?? "—"))).size;
       const seriesCount = new Set(scoped.map((r) => String(r[config.seriesField] ?? "—"))).size;
       let h = 5;
       if (xCount > 6) h += 1;
       if (xCount > 10) h += 1;
-      if (widget.type === "grouped_bar" && config.showLabels) h += 1;
+      if (widget.type !== "grouped_line" && config.showLabels) h += 1;
       let w = 6;
       const bars = xCount * seriesCount;
       if (bars > 12) w = 8;
@@ -917,6 +997,7 @@ export function buildOptionForWidget(widget: Widget, rows: DataRow[]): any {
     case "gauge": return buildGaugeOption(rows, widget.config);
     case "wave": return buildWaveOption(rows, widget.config);
     case "bar_line_combo": return buildBarLineComboOption(rows, widget.config);
+    case "bar_line_series": return buildBarLineSeriesOption(rows, widget.config);
     case "bar3d": return buildBar3DOption(rows, widget.config);
     case "pie3d": return buildPie3DOption(rows, widget.config);
     default: return {};
