@@ -156,4 +156,4 @@ export default function WidgetLibraryModal({ columns, onAdd, onClose }: WidgetLi
       </div>
     </div>
   );
-}
+} 
