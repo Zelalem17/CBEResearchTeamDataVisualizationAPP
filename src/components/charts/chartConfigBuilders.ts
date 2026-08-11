@@ -31,11 +31,38 @@ const CBE_BRAND_PURPLE = "#5b2a83";
 export function isCbeLabel(label: string): boolean {
   return /cbe/i.test(label);
 }
-/** Returns an itemStyle color override for CBE-labelled data/series,
- * or undefined so the caller's own default (palette / series index)
- * applies untouched. */
-function cbeColorOverride(label: string): { color: string } | undefined {
-  return isCbeLabel(label) ? { color: CBE_BRAND_PURPLE } : undefined;
+// Colors for everything that ISN'T CBE — deliberately contains no
+// purple at all, since purple is reserved exclusively for CBE. Leads
+// with gold (CBE's own accent color) so the common two-way "CBE vs
+// Industry" comparison reads as a clean purple-vs-gold pair; a third+
+// non-CBE category (e.g. a second competitor bank) falls through to the
+// remaining tones instead of repeating gold.
+const NON_CBE_COLORS = ["#f2a900", "#1f2937", "#0f766e", "#cc8b00", "#7c8a99", "#a16207"];
+
+/** Assigns every name in `names` a color: anything matching "CBE" always
+ * gets the brand purple; everything else gets the next unused color
+ * from NON_CBE_COLORS, in order of first appearance.
+ *
+ * This exists because naively indexing a shared palette by array
+ * position (`PALETTE[i % n]`) breaks the moment CBE isn't literally the
+ * first series/slice: whichever OTHER series lands on index 0 would
+ * coincidentally get the same purple that's supposed to be CBE-only,
+ * so both series render purple. Assigning colors by category identity
+ * instead of array position guarantees CBE is always uniquely purple
+ * and nothing else ever is, regardless of sort order. */
+function assignSeriesColors(names: string[]): Record<string, string> {
+  const map: Record<string, string> = {};
+  let nonCbeIdx = 0;
+  for (const name of names) {
+    if (name in map) continue;
+    if (isCbeLabel(name)) {
+      map[name] = CBE_BRAND_PURPLE;
+    } else {
+      map[name] = NON_CBE_COLORS[nonCbeIdx % NON_CBE_COLORS.length];
+      nonCbeIdx++;
+    }
+  }
+  return map;
 }
 
 export function groupAndAgg(rows: DataRow[], groupField: string, valueField?: string, agg: string = "sum") {
@@ -230,8 +257,8 @@ export function buildPieOption(rows: DataRow[], config: any) {
   const scoped = applyConfigFilters(rows, config);
   const data = groupAndAgg(scoped, config.category, config.value, config.agg ?? "sum").slice(0, 10);
   const { radius, roseType } = pieStyleProps(config.pieStyle);
+  const colorMap = assignSeriesColors(data.map((d) => d.key));
   return {
-    color: PALETTE,
     tooltip: { trigger: "item", backgroundColor: "rgba(17,24,39,0.92)", textStyle: { color: "#fff" } },
     legend: { bottom: 0, textStyle: { fontSize: 11 } },
     series: [{
@@ -239,7 +266,7 @@ export function buildPieOption(rows: DataRow[], config: any) {
       data: data.map((d) => ({
         name: d.key,
         value: d.value,
-        itemStyle: cbeColorOverride(d.key),
+        itemStyle: { color: colorMap[d.key] },
       })),
       itemStyle: { borderRadius: 6, borderColor: "#fff", borderWidth: 2 },
       // Name, actual value, and percent share — not just percent — so
@@ -277,40 +304,55 @@ export function buildScatterOption(rows: DataRow[], config: any) {
  * for each period, one point per period. Used for the "Scatter (A vs B)"
  * panel chart kind. Falls back to a friendly empty state when fewer
  * than 2 categories are present after filtering. */
+/** Scatter split by comparison category (e.g. CBE vs Industry) plotted
+ * over the shared x field (e.g. Period) — one colored dot-series per
+ * category, same idea as buildGroupedLineOption but as unconnected
+ * points. Replaces an earlier version that plotted category A's value
+ * against category B's value on two numeric axes: that produced a
+ * single point cloud with only one visual series, which read as "only
+ * one value" since neither category was distinguishable by color. Falls
+ * back to a friendly empty state when fewer than 2 categories are
+ * present after filtering. */
 export function buildCategoryScatterOption(rows: DataRow[], config: any) {
   const scoped = applyConfigFilters(rows, config);
   const seriesField = config.seriesField ?? "Category";
-  const xRowField = config.x;
+  const xField = config.x;
   const valueField = config.y ?? "Value";
 
-  const cats = Array.from(new Set(scoped.map((r) => String(r[seriesField])))).slice(0, 2);
-  if (cats.length < 2) {
+  const seriesValues = Array.from(new Set(scoped.map((r) => String(r[seriesField] ?? "—"))));
+  if (seriesValues.length < 2) {
     return {
       title: { text: "Need at least 2 categories to compare", left: "center", top: "middle", textStyle: { fontSize: 12, color: "#94a3b8" } },
       series: [],
     };
   }
-  const [catA, catB] = cats;
-  const xLabels = Array.from(new Set(scoped.map((r) => String(r[xRowField] ?? "—"))));
-  const points: [number, number, string][] = [];
-  for (const label of xLabels) {
-    const a = scoped.find((r) => String(r[xRowField] ?? "—") === label && String(r[seriesField]) === catA);
-    const b = scoped.find((r) => String(r[xRowField] ?? "—") === label && String(r[seriesField]) === catB);
-    if (!a || !b) continue;
-    const av = Number(a[valueField]), bv = Number(b[valueField]);
-    if (Number.isFinite(av) && Number.isFinite(bv)) points.push([av, bv, label]);
-  }
+  const xValues = Array.from(new Set(scoped.map((r) => String(r[xField] ?? "—")))).sort();
+  const colorMap = assignSeriesColors(seriesValues);
+
+  const series = seriesValues.map((sv) => {
+    const data: [number, number][] = [];
+    xValues.forEach((xv, xi) => {
+      const match = scoped.find((r) => String(r[xField] ?? "—") === xv && String(r[seriesField] ?? "—") === sv);
+      if (!match) return;
+      const v = Number(match[valueField]);
+      if (Number.isFinite(v)) data.push([xi, v]);
+    });
+    return {
+      name: sv, type: "scatter", data, symbolSize: 12,
+      itemStyle: { opacity: 0.85, color: colorMap[sv] },
+    };
+  });
 
   return {
-    color: PALETTE,
     tooltip: {
       trigger: "item", backgroundColor: "rgba(17,24,39,0.92)", borderWidth: 0, textStyle: { color: "#fff" },
-      formatter: (p: any) => `${p.data[2]}<br/>${catA}: ${p.data[0]}<br/>${catB}: ${p.data[1]}`,
+      formatter: (p: any) => `${xValues[p.value[0]]}<br/>${p.seriesName}: ${p.value[1].toLocaleString()}`,
     },
-    grid: baseGrid,
-    xAxis: { type: "value", name: catA, nameLocation: "middle", nameGap: 28 },
-    yAxis: { type: "value", name: catB, nameLocation: "middle", nameGap: 45 },
-    series: [{ type: "scatter", data: points, symbolSize: 12, itemStyle: { opacity: 0.75, color: PALETTE[0] } }],
+    legend: { bottom: 0, textStyle: { fontSize: 11 } },
+    grid: { ...baseGrid, bottom: 56 },
+    xAxis: { type: "category", data: xValues, axisLabel: { rotate: xValues.length > 6 ? 30 : 0 } },
+    yAxis: { type: "value" },
+    series,
   };
 }
 
@@ -600,11 +642,12 @@ export function buildPie3DOption(rows: DataRow[], config: any) {
   const total = data.reduce((s, d) => s + d.value, 0) || 1;
 
   let cumulative = 0;
-  const series = data.map((d, i) => {
+  const colorMap = assignSeriesColors(data.map((d) => d.key));
+  const series = data.map((d) => {
     const startRatio = cumulative / total;
     cumulative += d.value;
     const endRatio = cumulative / total;
-    const color = isCbeLabel(d.key) ? CBE_BRAND_PURPLE : PALETTE[i % PALETTE.length];
+    const color = colorMap[d.key];
     return {
       name: d.key,
       type: "surface",
@@ -666,13 +709,14 @@ export function buildGroupedBarOption(rows: DataRow[], config: any) {
   const totalsByX = xValues.map((_, xi) =>
     matrix.reduce((sum, seriesData) => sum + (seriesData[xi] ?? 0), 0) || 1
   );
+  const colorMap = assignSeriesColors(seriesValues);
 
   const series = seriesValues.map((sv, i) => {
     const data = matrix[i].map((v, xi) => {
       if (v === null) return null;
       return { value: v, pct: (v / totalsByX[xi]) * 100 };
     });
-    const seriesColor = isCbeLabel(sv) ? CBE_BRAND_PURPLE : PALETTE[i % PALETTE.length];
+    const seriesColor = colorMap[sv];
     const showLabels = !!config.showLabels;
     return {
       name: sv, type: "bar", data,
@@ -713,14 +757,15 @@ export function buildGroupedLineOption(rows: DataRow[], config: any) {
 
   const symbol = config.symbolShape ?? "circle";
   const showLabels = !!config.showLabels;
-  const series = seriesValues.map((sv, i) => {
+  const colorMap = assignSeriesColors(seriesValues);
+  const series = seriesValues.map((sv) => {
     const data = xValues.map((xv) => {
       const matching = scoped.filter((r) => String(r[xField] ?? "—") === xv && String(r[seriesField] ?? "—") === sv);
       const vals = matching.map((r) => Number(r[valueField])).filter(Number.isFinite);
       if (!vals.length) return null;
       return Math.round(aggValues(vals, agg) * 10000) / 10000;
     });
-    const seriesColor = isCbeLabel(sv) ? CBE_BRAND_PURPLE : PALETTE[i % PALETTE.length];
+    const seriesColor = colorMap[sv];
     return {
       name: sv, type: "line", data, smooth: true, symbol, symbolSize: symbol === "none" ? 0 : 7,
       lineStyle: { width: 2.5, color: seriesColor },
