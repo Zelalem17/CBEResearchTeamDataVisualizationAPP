@@ -2,7 +2,7 @@ import { useCallback, useRef, useState } from "react";
 import GridLayout, { Layout, WidthProvider } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
-import { Plus, FileSpreadsheet, FileImage, FileText } from "lucide-react";
+import { Plus, FileSpreadsheet, FileImage, FileText, LayoutGrid } from "lucide-react";
 import type { DataRow, FilterRule, Widget, WidgetType } from "@/types";
 import WidgetCard from "./WidgetCard";
 import WidgetLibraryModal from "./WidgetLibraryModal";
@@ -10,6 +10,7 @@ import { applyFilters } from "@/utils/filterUtils";
 import { exportNodeToPdf, exportDashboardToWord, exportRowsToExcel } from "@/utils/exportUtils";
 import { computeAutoFitSize } from "@/components/charts/chartConfigBuilders";
 import { remapWidgetConfig } from "@/services/chartTypeSwitch";
+import { packWidgets } from "@/services/layoutPacking";
 
 interface DashboardGridProps {
   widgets: Widget[];
@@ -85,11 +86,17 @@ export default function DashboardGrid({
   );
 
   const handleAddWidget = (widget: Omit<Widget, "id">) => {
-    const maxY = widgets.reduce((max, w) => Math.max(max, w.position.y + w.position.h), 0);
-    onWidgetsChange([...widgets, { ...widget, id: crypto.randomUUID(), position: { ...widget.position, y: maxY } }]);
+    const withNew = [...widgets, { ...widget, id: crypto.randomUUID() }];
+    // Re-pack the whole board rather than always starting a new full row:
+    // the new widget slots in next to an existing one when it fits the
+    // remaining row width, and everything stays sorted by type.
+    onWidgetsChange(packWidgets(withNew, filteredRows));
   };
 
-  const handleRemoveWidget = (id: string) => onWidgetsChange(widgets.filter((w) => w.id !== id));
+  const handleRemoveWidget = (id: string) =>
+    onWidgetsChange(packWidgets(widgets.filter((w) => w.id !== id), filteredRows));
+
+  const handleAutoArrange = () => onWidgetsChange(packWidgets(widgets, filteredRows));
 
   const handleToggleLabels = (id: string) =>
     onWidgetsChange(
@@ -162,6 +169,11 @@ export default function DashboardGrid({
           {editable && (
             <button onClick={() => setShowLibrary(true)} className="btn-secondary flex items-center gap-1.5 text-sm">
               <Plus size={15} /> Add widget
+            </button>
+          )}
+          {editable && (
+            <button onClick={handleAutoArrange} title="Sort by type and pack side by side" className="btn-secondary flex items-center gap-1.5 text-sm">
+              <LayoutGrid size={15} /> Auto-arrange
             </button>
           )}
           <button onClick={handleExportExcel} className="btn-secondary flex items-center gap-1.5 text-sm">
