@@ -2,13 +2,14 @@ import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   Image as ImageIcon, X, GripVertical, Maximize2, Minimize2, Percent,
-  Circle, Diamond, Square, Triangle, Palette, PieChart,
+  Circle, Diamond, Square, Triangle, Palette, PieChart, Repeat,
 } from "lucide-react";
-import type { DataRow, Widget } from "@/types";
+import type { DataRow, Widget, WidgetType } from "@/types";
 import ChartRenderer from "@/components/charts/ChartRenderer";
 import KpiCard from "@/components/kpi/KpiCard";
 import DataTable from "@/components/tables/DataTable";
 import { exportNodeToPng } from "@/utils/exportUtils";
+import { SWITCHABLE_CHART_TYPES, isSwitchableChartType } from "@/services/chartTypeSwitch";
 
 interface WidgetCardProps {
   widget: Widget;
@@ -25,6 +26,10 @@ interface WidgetCardProps {
   onCycleBarStyle?: () => void;
   /** Omit to hide the pie-design cycle button (pie widgets only). */
   onCyclePieStyle?: () => void;
+  /** Omit to hide the "change chart type" dropdown (viewer-role sessions,
+   * or widget types chartTypeSwitch.ts doesn't cover — kpi/table/heatmap/
+   * treemap keep their fixed shape). */
+  onChangeType?: (newType: WidgetType) => void;
 }
 
 // Bar and grouped-bar are clean by default; pie already always shows its
@@ -50,7 +55,7 @@ function WidgetBody({ widget, rows, onDrillDown }: Pick<WidgetCardProps, "widget
  * button, per-widget PNG export, chart-style toggles, expand-to-fullscreen,
  * and the widget's own visualization. */
 export default function WidgetCard({
-  widget, rows, onRemove, onDrillDown, onToggleLabels, onCycleSymbol, onCycleBarStyle, onCyclePieStyle,
+  widget, rows, onRemove, onDrillDown, onToggleLabels, onCycleSymbol, onCycleBarStyle, onCyclePieStyle, onChangeType,
 }: WidgetCardProps) {
   const nodeRef = useRef<HTMLDivElement>(null);
   const [expanded, setExpanded] = useState(false);
@@ -59,6 +64,7 @@ export default function WidgetCard({
   const showSymbolToggle = !!onCycleSymbol && SYMBOL_TOGGLEABLE_TYPES.has(widget.type);
   const showBarStyleToggle = !!onCycleBarStyle && BAR_STYLE_TOGGLEABLE_TYPES.has(widget.type);
   const showPieStyleToggle = !!onCyclePieStyle && PIE_STYLE_TOGGLEABLE_TYPES.has(widget.type);
+  const showTypeSwitch = !!onChangeType && isSwitchableChartType(widget.type);
 
   const symbolShape = widget.config?.symbolShape ?? "circle";
   const SymbolIcon = SYMBOL_ICONS[symbolShape] ?? Circle;
@@ -83,6 +89,20 @@ export default function WidgetCard({
           </span>
         </div>
         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+          {showTypeSwitch && (
+            <div className="relative flex items-center" title="Change chart type">
+              <Repeat size={12} className="pointer-events-none absolute left-1.5 text-gray-400" />
+              <select
+                value={widget.type}
+                onChange={(e) => onChangeType?.(e.target.value as WidgetType)}
+                className="appearance-none bg-transparent hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 dark:text-gray-400 text-[11px] rounded pl-5 pr-1.5 py-1 cursor-pointer focus:outline-none"
+              >
+                {SWITCHABLE_CHART_TYPES.map((t) => (
+                  <option key={t.type} value={t.type}>{t.label}</option>
+                ))}
+              </select>
+            </div>
+          )}
           {showPieStyleToggle && (
             <button
               onClick={onCyclePieStyle}
