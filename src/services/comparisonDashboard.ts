@@ -7,6 +7,7 @@
  * section/metric comparison chart re-renders as the chosen kind at once.
  */
 import type { DataRow, Widget, WidgetPosition, WidgetType } from "@/types";
+import { packWidgets } from "./layoutPacking";
 
 const COLS = 12;
 
@@ -164,19 +165,25 @@ export function generatePanelComparisonWidgets(rows: DataRow[], kind?: PanelChar
     position: place(12, 6),
   });
 
-  return widgets;
+  return packWidgets(widgets, rows);
 }
 
 /** Re-renders every comparison chart widget (identified by
  * `config.comparisonKey`, set by buildComparisonWidgetSpec above) as the
- * newly chosen kind, in place — same id, title, and grid position, so a
- * kind switch never disturbs manual layout or the KPI/table widgets. */
+ * newly chosen kind, in place, then re-sorts/re-packs the whole
+ * dashboard — switching every comparison chart to e.g. pie at once
+ * leaves the old bar-shaped slots a poor fit for the new pie sizes, so
+ * this re-flows the layout the same way a fresh generation would rather
+ * than leaving stale gaps or overlaps. KPI/table widgets keep their
+ * title and id; only position (and, for comparison charts, type/config)
+ * changes. */
 export function retypeComparisonWidgets(widgets: Widget[], rows: DataRow[], kind: PanelChartKind): Widget[] {
   const { xField } = firstMetaField(rows);
-  return widgets.map((w) => {
+  const retyped = widgets.map((w) => {
     const key = w.config?.comparisonKey;
     if (!key) return w;
     const spec = buildComparisonWidgetSpec(kind, xField, key.section, key.metric);
     return { ...w, type: spec.type, config: spec.config };
   });
+  return packWidgets(retyped, rows);
 }
