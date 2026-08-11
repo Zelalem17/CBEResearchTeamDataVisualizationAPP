@@ -15,6 +15,16 @@
  *   1. A named account from data/users.ts — one username + password per
  *      researcher, each with their own role. This is what "admin gives
  *      each researcher their own username and password" refers to.
+ *      Three roles:
+ *        - "admin": everything, including the "Manage users" panel
+ *          (creating/removing accounts).
+ *        - "editor": full data privileges — upload/add datasets, build
+ *          and edit dashboards, add/remove/rearrange/resize widgets,
+ *          filter, drill down, export — same as admin for anything data
+ *          related. Cannot open "Manage users"; account creation stays
+ *          admin-only.
+ *        - "viewer": read-only — view, filter, drill down, export. No
+ *          upload or edit controls.
  *   2. A single break-glass master admin account (username "admin"),
  *      configured via VITE_ADMIN_PASSWORD_HASH at build time — always
  *      available so you can never be fully locked out even if
@@ -29,7 +39,7 @@
 
 import { USERS } from "@/data/users";
 
-export type Role = "admin" | "viewer";
+export type Role = "admin" | "editor" | "viewer";
 
 export interface AuthedUser {
   role: Role;
@@ -79,7 +89,7 @@ export function loadSession(): AuthedUser | null {
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw);
-    if (parsed && (parsed.role === "admin" || parsed.role === "viewer") && typeof parsed.username === "string") {
+    if (parsed && (parsed.role === "admin" || parsed.role === "editor" || parsed.role === "viewer") && typeof parsed.username === "string") {
       return parsed as AuthedUser;
     }
   } catch { /* corrupt/old-format session — treat as logged out */ }
