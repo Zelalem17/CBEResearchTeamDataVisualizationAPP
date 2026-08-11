@@ -3,12 +3,13 @@ import GridLayout, { Layout, WidthProvider } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
 import { Plus, FileSpreadsheet, FileImage, FileText } from "lucide-react";
-import type { DataRow, FilterRule, Widget } from "@/types";
+import type { DataRow, FilterRule, Widget, WidgetType } from "@/types";
 import WidgetCard from "./WidgetCard";
 import WidgetLibraryModal from "./WidgetLibraryModal";
 import { applyFilters } from "@/utils/filterUtils";
 import { exportNodeToPdf, exportDashboardToWord, exportRowsToExcel } from "@/utils/exportUtils";
 import { computeAutoFitSize } from "@/components/charts/chartConfigBuilders";
+import { remapWidgetConfig } from "@/services/chartTypeSwitch";
 
 interface DashboardGridProps {
   widgets: Widget[];
@@ -128,6 +129,9 @@ export default function DashboardGrid({
       })
     );
 
+  const handleChangeType = (id: string, newType: WidgetType) =>
+    onWidgetsChange(widgets.map((w) => (w.id === id ? remapWidgetConfig(w, newType) : w)));
+
   const handleExportPdf = async () => {
     if (gridRef.current) await exportNodeToPdf(gridRef.current, datasetName, `${datasetName} — Dashboard`);
   };
@@ -196,6 +200,7 @@ export default function DashboardGrid({
                 onCycleSymbol={editable ? () => handleCycleSymbol(widget.id) : undefined}
                 onCycleBarStyle={editable ? () => handleCycleBarStyle(widget.id) : undefined}
                 onCyclePieStyle={editable ? () => handleCyclePieStyle(widget.id) : undefined}
+                onChangeType={editable ? (newType: WidgetType) => handleChangeType(widget.id, newType) : undefined}
               />
             </div>
           ))}
