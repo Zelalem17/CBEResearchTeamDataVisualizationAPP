@@ -2,6 +2,7 @@
  * into a suggested set of dashboard widgets (KPI cards, trends, category
  * breakdowns, distributions, correlations, and a data table). */
 import type { ColumnProfile, RelationshipHint, Widget, WidgetPosition } from "@/types";
+import { packWidgets } from "./layoutPacking";
 
 const COLS = 12;
 
@@ -84,5 +85,8 @@ export function generateWidgets(columns: ColumnProfile[], relationships: Relatio
   // 9. Data table — always
   widgets.push({ type: "table", title: "Data table", config: { columns: columns.map((c) => c.name), page_size: 25 }, position: place(12, 6) });
 
-  return widgets;
+  // Final pass: sort by type (KPIs cluster up top, table stays last)
+  // and shelf-pack side by side wherever two widgets fit the same row,
+  // rather than relying on the insertion-order `place()` positions above.
+  return packWidgets(widgets);
 }
