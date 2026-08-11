@@ -1,15 +1,23 @@
 import { useState } from "react";
-import { LogOut, ShieldCheck, Eye, Users } from "lucide-react";
+import { LogOut, ShieldCheck, Eye, Users, PenLine } from "lucide-react";
 import ThemeToggle from "./ThemeToggle";
 import logo from "@/assets/logo.svg";
 import { useAuthStore } from "@/store/authStore";
 import UserManagementPanel from "@/components/auth/UserManagementPanel";
+
+const ROLE_META = {
+  admin: { icon: ShieldCheck, label: "Full access: upload, edit, rearrange, and manage users" },
+  editor: { icon: PenLine, label: "Full data access: upload, edit, and rearrange (no user management)" },
+  viewer: { icon: Eye, label: "Read-only: view and filter" },
+} as const;
 
 export default function Topbar() {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const [showUsers, setShowUsers] = useState(false);
   const isAdmin = user?.role === "admin";
+  const roleMeta = user ? ROLE_META[user.role] : null;
+  const RoleIcon = roleMeta?.icon;
 
   return (
     <header className="shrink-0">
@@ -25,12 +33,12 @@ export default function Topbar() {
           </span>
         </div>
         <div className="flex items-center gap-3">
-          {user && (
+          {user && roleMeta && RoleIcon && (
             <span
-              title={user.role === "admin" ? "Full access: upload, edit, and rearrange" : "Read-only: view and filter"}
+              title={roleMeta.label}
               className="hidden sm:flex items-center gap-1 text-[11px] font-medium text-white/90 border border-white/20 rounded-full px-2 py-0.5"
             >
-              {user.role === "admin" ? <ShieldCheck size={12} /> : <Eye size={12} />}
+              <RoleIcon size={12} />
               {user.displayName}
             </span>
           )}
