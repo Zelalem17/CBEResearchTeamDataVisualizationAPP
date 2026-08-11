@@ -35,9 +35,9 @@ interface WidgetCardProps {
 // Bar and grouped-bar are clean by default; pie already always shows its
 // own value+percent (that one isn't toggleable — it's just how pie
 // reads). This is the set of types where the toggle button applies.
-const LABEL_TOGGLEABLE_TYPES = new Set(["bar", "bar_detailed", "grouped_bar", "line", "area", "grouped_line"]);
-const SYMBOL_TOGGLEABLE_TYPES = new Set(["line", "area", "grouped_line"]);
-const BAR_STYLE_TOGGLEABLE_TYPES = new Set(["bar", "bar_detailed", "grouped_bar", "bar_line_combo"]);
+const LABEL_TOGGLEABLE_TYPES = new Set(["bar", "bar_detailed", "grouped_bar", "line", "area", "grouped_line", "bar_line_series"]);
+const SYMBOL_TOGGLEABLE_TYPES = new Set(["line", "area", "grouped_line", "bar_line_series"]);
+const BAR_STYLE_TOGGLEABLE_TYPES = new Set(["bar", "bar_detailed", "grouped_bar", "bar_line_combo", "bar_line_series"]);
 const PIE_STYLE_TOGGLEABLE_TYPES = new Set(["pie", "pie_detailed"]);
 
 const SYMBOL_ICONS: Record<string, any> = { circle: Circle, diamond: Diamond, rect: Square, triangle: Triangle };
