@@ -4,6 +4,15 @@
  * redeploy — see README.md and the in-app "Manage users" panel (admin
  * only) for a form that generates the entry below for you.
  *
+ * Roles:
+ *   - "admin": full access, plus the "Manage users" panel.
+ *   - "editor": full access to data — upload/add datasets, build and
+ *     edit dashboards, add/remove/rearrange widgets, filter, drill
+ *     down, export — identical to admin for anything data-related, but
+ *     without "Manage users" (creating/removing accounts stays
+ *     admin-only).
+ *   - "viewer": read-only — view, filter, drill down, export.
+ *
  * passwordHash is a SHA-256 hex hash — NEVER put a plaintext password
  * here. Generate one with either:
  *   npm run hash-password -- "theirPassword"
@@ -17,11 +26,11 @@
 export interface UserAccount {
   username: string;
   passwordHash: string;
-  role: "admin" | "viewer";
+  role: "admin" | "editor" | "viewer";
   displayName?: string;
 }
 
 export const USERS: UserAccount[] = [
   { username: "Selam Kiros", passwordHash: "54ad97ca46fb8810b518a47c8bc0e0dff4e9cb10c703b2bedc42d1146eba8d9e", role: "admin", displayName: "Selam" },
-  { username: "Belay", passwordHash: "03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4", role: "viewer", displayName: "Belay" },
+  { username: "Belay", passwordHash: "03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4", role: "editor", displayName: "Belay" },
 ];
