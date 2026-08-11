@@ -17,6 +17,7 @@ const WIDGET_TYPES: { type: WidgetType; label: string; icon: any }[] = [
   { type: "bar_detailed", label: "Bar chart (values + %)", icon: ListOrdered },
   { type: "grouped_bar", label: "Grouped bar (compare)", icon: BarChart3 },
   { type: "bar_line_combo", label: "Bar + line (Pareto)", icon: GitCompare },
+  { type: "bar_line_series", label: "Bar + line (compare)", icon: GitCompare },
   { type: "bar3d", label: "3D bar (compare)", icon: Box },
   { type: "line", label: "Line chart", icon: LineChart },
   { type: "grouped_line", label: "Grouped line (compare)", icon: LineChart },
@@ -45,7 +46,7 @@ const DEFAULT_SIZE: Record<WidgetType, { w: number; h: number }> = {
   heatmap: { w: 6, h: 5 }, treemap: { w: 6, h: 5 }, gauge: { w: 3, h: 3 }, table: { w: 12, h: 6 },
   grouped_bar: { w: 6, h: 5 }, grouped_line: { w: 6, h: 5 }, category_scatter: { w: 6, h: 5 },
   bar_detailed: { w: 9, h: 5 }, pie_detailed: { w: 9, h: 5 },
-  bar_line_combo: { w: 7, h: 6 }, bar3d: { w: 7, h: 6 }, pie3d: { w: 6, h: 6 }, wave: { w: 4, h: 4 },
+  bar_line_combo: { w: 7, h: 6 }, bar_line_series: { w: 7, h: 6 }, bar3d: { w: 7, h: 6 }, pie3d: { w: 6, h: 6 }, wave: { w: 4, h: 4 },
 };
 
 /** Modal used to add a new widget to the dashboard: pick a chart type,
@@ -79,7 +80,7 @@ export default function WidgetLibraryModal({ columns, onAdd, onClose }: WidgetLi
       case "treemap": widget = { ...base, title: `${fieldB} breakdown`, config: { levels: [fieldA], value: fieldB } }; break;
       case "gauge": widget = { ...base, title: `${fieldB} (avg)`, config: { field: fieldB, agg: "avg" } }; break;
       case "table": widget = { ...base, title: "Data table", config: { columns: columns.map((c) => c.name), page_size: 25 } }; break;
-      case "grouped_bar": case "grouped_line": case "category_scatter": case "bar3d":
+      case "grouped_bar": case "grouped_line": case "category_scatter": case "bar3d": case "bar_line_series":
         widget = { ...base, title: `${fieldB} by ${fieldA}, compared by ${fieldC}`, config: { x: fieldA, y: fieldB, seriesField: fieldC, agg: "sum" } };
         break;
       default: widget = { ...base, title: `${fieldB} by ${fieldA}`, config: { x: fieldA, y: fieldB, agg: "sum" } };
@@ -138,7 +139,7 @@ export default function WidgetLibraryModal({ columns, onAdd, onClose }: WidgetLi
                 </div>
               </>
             )}
-            {(selected === "grouped_bar" || selected === "grouped_line" || selected === "category_scatter" || selected === "bar3d") && (
+            {(selected === "grouped_bar" || selected === "grouped_line" || selected === "category_scatter" || selected === "bar3d" || selected === "bar_line_series") && (
               <div className="col-span-2">
                 <label className="text-xs text-gray-500 mb-1 block">Compare by (series)</label>
                 <select className="input text-sm" value={fieldC} onChange={(e) => setFieldC(e.target.value)}>
