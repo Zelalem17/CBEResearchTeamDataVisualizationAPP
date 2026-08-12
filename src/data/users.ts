@@ -18,7 +18,7 @@ export const users: UserAccount[] = [
     role: "editor",
     displayName: "zola"
   }
-];
+]; 
 
 // Alias export to satisfy files importing USERS in uppercase
 export const USERS = users;
