@@ -23,12 +23,20 @@
  * static site — see the security note at the top of services/auth.ts
  * before treating this as protecting anything sensitive.
  */
+// 1. Define the TypeScript type/interface shape
 export interface UserAccount {
   username: string;
   passwordHash: string;
   role: "admin" | "editor" | "viewer";
   displayName?: string;
-  
-    { username: "zelalem", passwordHash: "d88385afb362d3b8d4fc3783190fe3fe34c32e73516731e428e91b6966c9808c", role: "editor", displayName: "zola" },
 }
-  
+
+// 2. Export the actual data array using that interface
+export const users: UserAccount[] = [
+  {
+    username: "zelalem",
+    passwordHash: "d88385afb362d3b8d4fc3783190fe3fe34c32e73516731e428e91b6966c9808c",
+    role: "editor",
+    displayName: "zola"
+  }
+];
