@@ -15,7 +15,11 @@ export interface UserAccount {
     passwordHash: "d88385afb362d3b8d4fc3783190fe3fe34c32e73516731e428e91b6966c9808c",
     role: "editor",
     displayName: "zola"
-  }
+  },
+     { username: "070695",
+   passwordHash: "887315f08fe20c8dd988313aaae4ff87d94d18ea7488d3c4f827b617c48684ad", 
+   role: "editor", 
+   displayName: "Zelalem Belay" },
 ]; 
 
 // Alias export to satisfy files importing USERS in uppercase
