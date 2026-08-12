@@ -40,7 +40,14 @@ const WIDGET_TYPES: { type: WidgetType; label: string; icon: any }[] = [
 // the user has to manually drag larger just to read labels/legends —
 // widgets can still be resized or expanded to fullscreen (the expand
 // icon on each widget card) at any time.
-const DEFAULT_SIZE: Record<WidgetType, { w: number; h: number }> = {
+//
+// Deliberately `Partial` + a fallback (rather than `Record<WidgetType,
+// ...>`, which demands every single widget type be listed) — a chart
+// type can never fail the whole production build with a "missing
+// property" error just because this map lags behind types/index.ts by
+// one entry; it just falls back to a sane default size instead.
+const FALLBACK_SIZE = { w: 6, h: 5 };
+const DEFAULT_SIZE: Partial<Record<WidgetType, { w: number; h: number }>> = {
   kpi: { w: 3, h: 2 }, bar: { w: 6, h: 5 }, line: { w: 6, h: 5 }, area: { w: 6, h: 5 },
   pie: { w: 5, h: 5 }, scatter: { w: 6, h: 5 }, histogram: { w: 5, h: 5 },
   heatmap: { w: 6, h: 5 }, treemap: { w: 6, h: 5 }, gauge: { w: 3, h: 3 }, table: { w: 12, h: 6 },
@@ -62,7 +69,7 @@ export default function WidgetLibraryModal({ columns, onAdd, onClose }: WidgetLi
 
   const handleAdd = () => {
     if (!selected) return;
-    const size = DEFAULT_SIZE[selected];
+    const size = DEFAULT_SIZE[selected] ?? FALLBACK_SIZE;
     const base = { type: selected, position: { x: 0, y: 0, ...size } };
 
     let widget: Omit<Widget, "id">;
@@ -156,4 +163,4 @@ export default function WidgetLibraryModal({ columns, onAdd, onClose }: WidgetLi
       </div>
     </div>
   );
-} 
+}
