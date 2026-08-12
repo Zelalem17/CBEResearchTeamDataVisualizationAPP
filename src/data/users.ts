@@ -24,6 +24,7 @@
  * before treating this as protecting anything sensitive.
  */
 // 1. Define the TypeScript type/interface shape
+// src/data/users.ts
 export interface UserAccount {
   username: string;
   passwordHash: string;
@@ -31,7 +32,6 @@ export interface UserAccount {
   displayName?: string;
 }
 
-// 2. Export the actual data array using that interface
 export const users: UserAccount[] = [
   {
     username: "zelalem",
@@ -40,3 +40,6 @@ export const users: UserAccount[] = [
     displayName: "zola"
   }
 ];
+
+// Alias export to satisfy files importing USERS in uppercase
+export const USERS = users;
