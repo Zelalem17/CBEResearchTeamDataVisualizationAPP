@@ -6,7 +6,7 @@ export interface UserAccount {
 }
  export const users: UserAccount[] = [
   { 
-    username: "zola",
+    username: "admin",
     passwordHash: "67a20ef9ca16dac572541eaa76e742683bf3785db5e52c5ae9a11d29e794e088", 
     role: "admin",
     displayName: "Zelalem Belay" 
