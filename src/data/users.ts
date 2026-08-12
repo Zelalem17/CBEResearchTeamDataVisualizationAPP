@@ -4,7 +4,7 @@ export interface UserAccount {
   role: "admin" | "editor" | "viewer";
   displayName?: string;
 }
-
+ 
 export const users: UserAccount[] = [
   { 
     username: "zola",
