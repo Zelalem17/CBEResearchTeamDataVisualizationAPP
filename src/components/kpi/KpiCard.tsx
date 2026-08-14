@@ -28,7 +28,7 @@ function aggregate(rows: DataRow[], field: string, agg: string): number {
   }
 }
 
-function formatNumber(n: number): string {
+export function formatNumber(n: number): string {
   if (Math.abs(n) >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (Math.abs(n) >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
   return n.toLocaleString(undefined, { maximumFractionDigits: 2 });
@@ -46,23 +46,28 @@ function valueFontSizeClass(formatted: string): string {
   return "text-lg";
 }
 
-export default function KpiCard({ widget, rows }: KpiCardProps) {
+/** Single source of truth for a KPI widget's number + trend — used by
+ * this component on screen, and reused as-is by the Word export
+ * (exportUtils.ts) so the exported report's KPI section always matches
+ * exactly what's on screen instead of drifting out of sync with a
+ * second, hand-copied implementation. */
+export function computeKpiValue(widget: Widget, rows: DataRow[]): { value: number; deltaPct: number; formattedValue: string } {
   const { field, agg = "sum", filters } = widget.config;
+  const scoped = applyConfigFilters(rows, filters);
+  const total = aggregate(scoped, field, agg);
+  // Split rows in half to approximate a trend indicator (first half vs second half)
+  const mid = Math.floor(scoped.length / 2);
+  const first = aggregate(scoped.slice(0, mid), field, agg);
+  const second = aggregate(scoped.slice(mid), field, agg);
+  const delta = first === 0 ? 0 : ((second - first) / Math.abs(first)) * 100;
+  return { value: total, deltaPct: delta, formattedValue: formatNumber(total) };
+}
 
-  const { value, deltaPct } = useMemo(() => {
-    const scoped = applyConfigFilters(rows, filters);
-    const total = aggregate(scoped, field, agg);
-    // Split rows in half to approximate a trend indicator (first half vs second half)
-    const mid = Math.floor(scoped.length / 2);
-    const first = aggregate(scoped.slice(0, mid), field, agg);
-    const second = aggregate(scoped.slice(mid), field, agg);
-    const delta = first === 0 ? 0 : ((second - first) / Math.abs(first)) * 100;
-    return { value: total, deltaPct: delta };
-  }, [rows, field, agg, filters]);
+export default function KpiCard({ widget, rows }: KpiCardProps) {
+  const { value, deltaPct, formattedValue } = useMemo(() => computeKpiValue(widget, rows), [widget, rows]);
 
   const isUp = deltaPct > 0.5;
   const isDown = deltaPct < -0.5;
-  const formattedValue = formatNumber(value);
 
   return (
     <div className="h-full flex flex-col justify-between p-1.5">
