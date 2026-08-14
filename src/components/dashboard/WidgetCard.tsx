@@ -88,7 +88,7 @@ export default function WidgetCard({
             {widget.title}
           </span>
         </div>
-        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+        <div className="widget-no-drag flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
           {showTypeSwitch && (
             <div className="relative flex items-center" title="Change chart type">
               <Repeat size={12} className="pointer-events-none absolute left-1.5 text-gray-400" />
