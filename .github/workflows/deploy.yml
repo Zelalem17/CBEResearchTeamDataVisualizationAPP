@@ -40,7 +40,7 @@ jobs:
           # See .env.example / README.md for how to generate these:
           #   npm run hash-password -- "yourPassword"
           VITE_ADMIN_PASSWORD_HASH: ${{ secrets.VITE_ADMIN_PASSWORD_HASH }}
-          VITE_VIEWER_PASSWORD_HASH: ${{ secrets.VITE_VIEWER_PASSWORD_HASH }}
+           ${{ secrets.VITE_VIEWER_PASSWORD_HASH }}
 
       - uses: actions/configure-pages@v5
 
