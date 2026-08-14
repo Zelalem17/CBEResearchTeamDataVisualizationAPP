@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import GridLayout, { Layout, WidthProvider } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
@@ -7,7 +7,7 @@ import type { DataRow, FilterRule, Widget, WidgetType } from "@/types";
 import WidgetCard from "./WidgetCard";
 import WidgetLibraryModal from "./WidgetLibraryModal";
 import { applyFilters } from "@/utils/filterUtils";
-import { exportNodeToPdf, exportDashboardToWord, exportRowsToExcel } from "@/utils/exportUtils";
+import { exportDashboardToPdf, exportDashboardToWord, exportRowsToExcel } from "@/utils/exportUtils";
 import { computeAutoFitSize } from "@/components/charts/chartConfigBuilders";
 import { remapWidgetConfig } from "@/services/chartTypeSwitch";
 import { packWidgets } from "@/services/layoutPacking";
@@ -41,37 +41,57 @@ export default function DashboardGrid({
 }: DashboardGridProps) {
   const [showLibrary, setShowLibrary] = useState(false);
   const [exportingWord, setExportingWord] = useState(false);
+  const [exportingPdf, setExportingPdf] = useState(false);
   const gridRef = useRef<HTMLDivElement>(null);
 
-  const filteredRows = applyFilters(
-    searchTerm
-      ? rows.filter((r) => Object.values(r).some((v) => String(v ?? "").toLowerCase().includes(searchTerm.toLowerCase())))
-      : rows,
-    filters
+  // Memoized: without this, filteredRows was a brand-new array on every
+  // single render (typing in search, dragging one widget, toggling one
+  // widget's label…), which meant every OTHER chart on the board also
+  // rebuilt its ECharts option from scratch every time too, since
+  // ChartRenderer's own useMemo is keyed on this array's identity. That
+  // was the main source of "the page is slow" for boards with more than
+  // a few widgets — this alone fixes it for anything that doesn't
+  // actually change the visible rows.
+  const filteredRows = useMemo(
+    () =>
+      applyFilters(
+        searchTerm
+          ? rows.filter((r) => Object.values(r).some((v) => String(v ?? "").toLowerCase().includes(searchTerm.toLowerCase())))
+          : rows,
+        filters
+      ),
+    [rows, searchTerm, filters]
   );
 
-  const layout: Layout[] = widgets.map((w) => {
-    // Content-aware floor: a chart is never rendered smaller than what
-    // its *current* (filtered) data actually needs to display fully —
-    // more categories, comparison series, or on-bar labels all raise
-    // the floor automatically, so the person never has to hunt for the
-    // resize handle and manually drag a graph open just to see it whole.
-    // Bumps the rendered size up to that floor and stops the grid's
-    // resize handle from dragging back below it; never shrinks a size
-    // the person (or a saved layout) already set larger than needed.
-    const fit = computeAutoFitSize(w, filteredRows);
-    const minW = Math.max(2, fit?.w ?? 2);
-    const minH = Math.max(2, fit?.h ?? 2);
-    return {
-      i: w.id,
-      x: w.position.x,
-      y: w.position.y,
-      w: Math.max(w.position.w, minW),
-      h: Math.max(w.position.h, minH),
-      minW,
-      minH,
-    };
-  });
+  // Also memoized for the same reason — computeAutoFitSize re-aggregates
+  // each widget's data, which isn't free on a large dataset; no need to
+  // redo it unless the widgets or the filtered rows actually changed.
+  const layout: Layout[] = useMemo(
+    () =>
+      widgets.map((w) => {
+        // Content-aware floor: a chart is never rendered smaller than what
+        // its *current* (filtered) data actually needs to display fully —
+        // more categories, comparison series, or on-bar labels all raise
+        // the floor automatically, so the person never has to hunt for the
+        // resize handle and manually drag a graph open just to see it whole.
+        // Bumps the rendered size up to that floor and stops the grid's
+        // resize handle from dragging back below it; never shrinks a size
+        // the person (or a saved layout) already set larger than needed.
+        const fit = computeAutoFitSize(w, filteredRows);
+        const minW = Math.max(2, fit?.w ?? 2);
+        const minH = Math.max(2, fit?.h ?? 2);
+        return {
+          i: w.id,
+          x: w.position.x,
+          y: w.position.y,
+          w: Math.max(w.position.w, minW),
+          h: Math.max(w.position.h, minH),
+          minW,
+          minH,
+        };
+      }),
+    [widgets, filteredRows]
+  );
 
   const handleLayoutChange = useCallback(
     (newLayout: Layout[]) => {
@@ -140,7 +160,19 @@ export default function DashboardGrid({
     onWidgetsChange(widgets.map((w) => (w.id === id ? remapWidgetConfig(w, newType) : w)));
 
   const handleExportPdf = async () => {
-    if (gridRef.current) await exportNodeToPdf(gridRef.current, datasetName, `${datasetName} — Dashboard`);
+    setExportingPdf(true);
+    try {
+      if (gridRef.current) {
+        await exportDashboardToPdf(
+          gridRef.current,
+          widgets.map((w) => ({ id: w.id, title: w.title, gridW: w.position.w, type: w.type, config: w.config })),
+          datasetName,
+          `${datasetName} — Dashboard`
+        );
+      }
+    } finally {
+      setExportingPdf(false);
+    }
   };
 
   const handleExportExcel = () => exportRowsToExcel(filteredRows, datasetName, datasetName);
@@ -151,7 +183,7 @@ export default function DashboardGrid({
     try {
       await exportDashboardToWord(
         gridRef.current,
-        widgets.map((w) => ({ id: w.id, title: w.title, gridW: w.position.w })),
+        widgets.map((w) => ({ id: w.id, title: w.title, gridW: w.position.w, type: w.type, config: w.config })),
         datasetName,
         `${datasetName} — Dashboard Report`,
         filteredRows
@@ -182,8 +214,8 @@ export default function DashboardGrid({
           <button onClick={handleExportWord} disabled={exportingWord} className="btn-secondary flex items-center gap-1.5 text-sm">
             <FileText size={15} /> {exportingWord ? "Generating…" : "Word"}
           </button>
-          <button onClick={handleExportPdf} className="btn-secondary flex items-center gap-1.5 text-sm">
-            <FileImage size={15} /> PDF
+          <button onClick={handleExportPdf} disabled={exportingPdf} className="btn-secondary flex items-center gap-1.5 text-sm">
+            <FileImage size={15} /> {exportingPdf ? "Generating…" : "PDF"}
           </button>
         </div>
       </div>
@@ -196,6 +228,13 @@ export default function DashboardGrid({
           rowHeight={ROW_HEIGHT}
           onLayoutChange={handleLayoutChange}
           draggableHandle=".widget-drag-handle"
+          // Buttons/selects inside the drag handle (expand, export,
+          // remove, the style/shape/type toggles) are marked
+          // .widget-no-drag — without this, react-grid-layout's own
+          // mousedown listener on the handle intercepts the click before
+          // it reaches the button, which is why those controls looked
+          // like they "didn't work."
+          draggableCancel=".widget-no-drag"
           isDraggable={editable}
           isResizable={editable}
           compactType="vertical"
