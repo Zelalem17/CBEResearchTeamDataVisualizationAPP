@@ -1,13 +1,5 @@
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import ReactECharts from "echarts-for-react";
-// Registers the `bar3D`/`surface`/grid3D chart types (buildBar3DOption,
-// buildPie3DOption) and the `liquidFill` chart type (buildWaveOption)
-// onto the shared `echarts` module instance — echarts-for-react's
-// internal `import * as echarts from "echarts"` resolves to the exact
-// same singleton module, so these extensions are visible to it too as
-// long as this file is loaded before any chart renders.
-import "echarts-gl";
-import "echarts-liquidfill";
 import { useThemeStore } from "@/store/themeStore";
 import { buildOptionForWidget, getWidgetListData, isCbeLabel } from "./chartConfigBuilders";
 import type { DataRow, Widget } from "@/types";
@@ -28,6 +20,28 @@ const DETAILED_TYPES = new Set(["bar_detailed", "pie_detailed"]);
 // categorical at all — so drill-down is skipped for them rather than
 // filtering on a garbage value.
 const NO_DRILLDOWN_TYPES = new Set(["bar3d", "pie3d", "wave"]);
+
+// echarts-gl (bar3D/surface, ~1MB+ of WebGL machinery) and
+// echarts-liquidfill are only needed by bar3d/pie3d/wave widgets, which
+// most dashboards never use — importing them unconditionally at the top
+// of this file (as a side effect, so every chart type could use them)
+// was baking that weight into the main JS bundle every visitor
+// downloads, which was the biggest single contributor to "the page
+// loads very slow." Loading them lazily, only the moment a widget that
+// actually needs one is about to render, means the vast majority of
+// dashboards (bar/line/pie/etc.) never pay that cost at all.
+const NEEDS_GL = new Set(["bar3d", "pie3d"]);
+const NEEDS_LIQUID = new Set(["wave"]);
+let glLoading: Promise<unknown> | null = null;
+let liquidLoading: Promise<unknown> | null = null;
+function ensureGlLoaded() {
+  if (!glLoading) glLoading = import("echarts-gl");
+  return glLoading;
+}
+function ensureLiquidLoaded() {
+  if (!liquidLoading) liquidLoading = import("echarts-liquidfill");
+  return liquidLoading;
+}
 
 export default function ChartRenderer({ widget, rows, onDrillDown, chartRef }: ChartRendererProps) {
   const isDetailed = DETAILED_TYPES.has(widget.type);
@@ -106,8 +120,26 @@ function ValueList({ data }: { data: { key: string; value: number; pct: number }
 function EchartsPanel({ widget, rows, onDrillDown, chartRef }: ChartRendererProps) {
   const theme = useThemeStore((s) => s.theme);
   const localRef = useRef<any>(null);
+  const needsExtension = NEEDS_GL.has(widget.type) || NEEDS_LIQUID.has(widget.type);
+  const [extensionReady, setExtensionReady] = useState(!needsExtension);
 
-  const option = useMemo(() => buildOptionForWidget(widget, rows), [widget, rows]);
+  useEffect(() => {
+    if (!needsExtension) {
+      setExtensionReady(true);
+      return;
+    }
+    setExtensionReady(false);
+    let cancelled = false;
+    const load = NEEDS_GL.has(widget.type) ? ensureGlLoaded() : ensureLiquidLoaded();
+    load.then(() => {
+      if (!cancelled) setExtensionReady(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [widget.type, needsExtension]);
+
+  const option: any = useMemo(() => buildOptionForWidget(widget, rows), [widget, rows]);
 
   const onEvents = useMemo(
     () => ({
@@ -120,6 +152,15 @@ function EchartsPanel({ widget, rows, onDrillDown, chartRef }: ChartRendererProp
     }),
     [onDrillDown, widget.config, widget.type]
   );
+
+  if (!extensionReady) {
+    return (
+      <div className="h-full w-full flex items-center justify-center text-xs text-gray-400 gap-2">
+        <span className="w-3 h-3 rounded-full border-2 border-gray-300 border-t-brand-500 animate-spin" />
+        Loading chart engine…
+      </div>
+    );
+  }
 
   return (
     <ReactECharts
