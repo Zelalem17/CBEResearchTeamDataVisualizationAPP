@@ -915,8 +915,14 @@ export function computeAutoFitSize(widget: Widget, rows: DataRow[]): { w: number
       if (n > 6) h += 1; // rotated x-axis labels need more vertical room
       if (n > 10) h += 1;
       if (config.showLabels) h += 1; // on-bar value+% chips need headroom too
-      let w = widget.type === "bar_detailed" ? 9 : 6;
-      if (n > 8) w = Math.min(12, w + 2);
+      // Snapped to half (6) or full (12) width of the 12-column grid,
+      // rather than intermediate steps — half-width is what lets two
+      // charts sit side by side in one row (the common case); a chart
+      // only escalates to full width once it has more categories than
+      // comfortably fit at half-width without the labels themselves
+      // getting cramped or cut off (n > 6 is also exactly where the
+      // chart's own x-axis labels switch to rotated, above).
+      const w = n > 6 ? 12 : widget.type === "bar_detailed" ? 9 : 6;
       return { w, h };
     }
     case "pie":
@@ -938,10 +944,11 @@ export function computeAutoFitSize(widget: Widget, rows: DataRow[]): { w: number
       if (xCount > 6) h += 1;
       if (xCount > 10) h += 1;
       if (widget.type !== "grouped_line" && config.showLabels) h += 1;
-      let w = 6;
+      // Half-width by default (pairs two per row); escalates to full
+      // width once there's enough total bars/points (x categories ×
+      // series) that half-width would start cramming them together.
       const bars = xCount * seriesCount;
-      if (bars > 12) w = 8;
-      if (bars > 24) w = 10;
+      const w = bars > 12 ? 12 : 6;
       return { w, h };
     }
     case "heatmap":
@@ -952,12 +959,11 @@ export function computeAutoFitSize(widget: Widget, rows: DataRow[]): { w: number
       const n = groupAndAgg(scoped, config.x, config.y, config.agg ?? "sum").slice(0, 15).length;
       let h = 6; // dual y-axis + legend needs a bit more than a plain bar
       if (n > 8) h += 1;
-      let w = 7;
-      if (n > 8) w = 9;
+      const w = n > 8 ? 12 : 6;
       return { w, h };
     }
     case "bar3d":
-      return { w: 7, h: 6 }; // 3D viewport needs real estate to read
+      return { w: 6, h: 6 }; // half-width still leaves room for the 3D viewport
     case "pie3d":
       return { w: 6, h: 6 };
     case "wave":
