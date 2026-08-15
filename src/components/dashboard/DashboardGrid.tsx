@@ -6,6 +6,7 @@ import { Plus, FileSpreadsheet, FileImage, FileText, LayoutGrid } from "lucide-r
 import type { DataRow, FilterRule, Widget, WidgetType } from "@/types";
 import WidgetCard from "./WidgetCard";
 import WidgetLibraryModal from "./WidgetLibraryModal";
+import ReportPanel from "./ReportPanel";
 import { applyFilters } from "@/utils/filterUtils";
 import { exportDashboardToPdf, exportDashboardToWord, exportRowsToExcel } from "@/utils/exportUtils";
 import { computeAutoFitSize } from "@/components/charts/chartConfigBuilders";
@@ -44,6 +45,12 @@ export default function DashboardGrid({
   const [exportingPdf, setExportingPdf] = useState(false);
   const gridRef = useRef<HTMLDivElement>(null);
 
+  // KPI ("total") widgets live in the fixed Report panel above the grid,
+  // not as draggable tiles inside it — see ReportPanel.tsx. Everything
+  // else (actual charts + data tables) stays in the draggable grid.
+  const kpiWidgets = useMemo(() => widgets.filter((w) => w.type === "kpi"), [widgets]);
+  const gridWidgets = useMemo(() => widgets.filter((w) => w.type !== "kpi"), [widgets]);
+
   // Memoized: without this, filteredRows was a brand-new array on every
   // single render (typing in search, dragging one widget, toggling one
   // widget's label…), which meant every OTHER chart on the board also
@@ -68,7 +75,7 @@ export default function DashboardGrid({
   // redo it unless the widgets or the filtered rows actually changed.
   const layout: Layout[] = useMemo(
     () =>
-      widgets.map((w) => {
+      gridWidgets.map((w) => {
         // Content-aware floor: a chart is never rendered smaller than what
         // its *current* (filtered) data actually needs to display fully —
         // more categories, comparison series, or on-bar labels all raise
@@ -90,7 +97,7 @@ export default function DashboardGrid({
           minH,
         };
       }),
-    [widgets, filteredRows]
+    [gridWidgets, filteredRows]
   );
 
   const handleLayoutChange = useCallback(
@@ -105,18 +112,29 @@ export default function DashboardGrid({
     [widgets, onWidgetsChange, editable]
   );
 
+  // KPI widgets live in the fixed Report panel now, not the draggable
+  // grid — so they're excluded before packing (which sorts + shelf-packs
+  // for grid x/y) and added back untouched, rather than having their
+  // "position" consume phantom grid space that would leave a gap next
+  // to whatever chart got packed after them.
+  const repackGridWidgets = (all: Widget[]) => {
+    const kpis = all.filter((w) => w.type === "kpi");
+    const rest = all.filter((w) => w.type !== "kpi");
+    return [...kpis, ...packWidgets(rest, filteredRows)];
+  };
+
   const handleAddWidget = (widget: Omit<Widget, "id">) => {
     const withNew = [...widgets, { ...widget, id: crypto.randomUUID() }];
     // Re-pack the whole board rather than always starting a new full row:
     // the new widget slots in next to an existing one when it fits the
     // remaining row width, and everything stays sorted by type.
-    onWidgetsChange(packWidgets(withNew, filteredRows));
+    onWidgetsChange(repackGridWidgets(withNew));
   };
 
   const handleRemoveWidget = (id: string) =>
-    onWidgetsChange(packWidgets(widgets.filter((w) => w.id !== id), filteredRows));
+    onWidgetsChange(repackGridWidgets(widgets.filter((w) => w.id !== id)));
 
-  const handleAutoArrange = () => onWidgetsChange(packWidgets(widgets, filteredRows));
+  const handleAutoArrange = () => onWidgetsChange(repackGridWidgets(widgets));
 
   const handleToggleLabels = (id: string) =>
     onWidgetsChange(
@@ -221,41 +239,45 @@ export default function DashboardGrid({
       </div>
 
       <div ref={gridRef}>
-        <ResponsiveGridLayout
-          className="layout"
-          layout={layout}
-          cols={GRID_COLS}
-          rowHeight={ROW_HEIGHT}
-          onLayoutChange={handleLayoutChange}
-          draggableHandle=".widget-drag-handle"
-          // Buttons/selects inside the drag handle (expand, export,
-          // remove, the style/shape/type toggles) are marked
-          // .widget-no-drag — without this, react-grid-layout's own
-          // mousedown listener on the handle intercepts the click before
-          // it reaches the button, which is why those controls looked
-          // like they "didn't work."
-          draggableCancel=".widget-no-drag"
-          isDraggable={editable}
-          isResizable={editable}
-          compactType="vertical"
-          margin={[12, 12]}
-        >
-          {widgets.map((widget) => (
-            <div key={widget.id}>
-              <WidgetCard
-                widget={widget}
-                rows={filteredRows}
-                onRemove={editable ? () => handleRemoveWidget(widget.id) : undefined}
-                onDrillDown={onDrillDown}
-                onToggleLabels={editable ? () => handleToggleLabels(widget.id) : undefined}
-                onCycleSymbol={editable ? () => handleCycleSymbol(widget.id) : undefined}
-                onCycleBarStyle={editable ? () => handleCycleBarStyle(widget.id) : undefined}
-                onCyclePieStyle={editable ? () => handleCyclePieStyle(widget.id) : undefined}
-                onChangeType={editable ? (newType: WidgetType) => handleChangeType(widget.id, newType) : undefined}
-              />
-            </div>
-          ))}
-        </ResponsiveGridLayout>
+        <ReportPanel kpiWidgets={kpiWidgets} rows={filteredRows} onRemove={editable ? handleRemoveWidget : undefined} />
+
+        <div className="mt-4">
+          <ResponsiveGridLayout
+            className="layout"
+            layout={layout}
+            cols={GRID_COLS}
+            rowHeight={ROW_HEIGHT}
+            onLayoutChange={handleLayoutChange}
+            draggableHandle=".widget-drag-handle"
+            // Buttons/selects inside the drag handle (expand, export,
+            // remove, the style/shape/type toggles) are marked
+            // .widget-no-drag — without this, react-grid-layout's own
+            // mousedown listener on the handle intercepts the click before
+            // it reaches the button, which is why those controls looked
+            // like they "didn't work."
+            draggableCancel=".widget-no-drag"
+            isDraggable={editable}
+            isResizable={editable}
+            compactType="vertical"
+            margin={[12, 12]}
+          >
+            {gridWidgets.map((widget) => (
+              <div key={widget.id}>
+                <WidgetCard
+                  widget={widget}
+                  rows={filteredRows}
+                  onRemove={editable ? () => handleRemoveWidget(widget.id) : undefined}
+                  onDrillDown={onDrillDown}
+                  onToggleLabels={editable ? () => handleToggleLabels(widget.id) : undefined}
+                  onCycleSymbol={editable ? () => handleCycleSymbol(widget.id) : undefined}
+                  onCycleBarStyle={editable ? () => handleCycleBarStyle(widget.id) : undefined}
+                  onCyclePieStyle={editable ? () => handleCyclePieStyle(widget.id) : undefined}
+                  onChangeType={editable ? (newType: WidgetType) => handleChangeType(widget.id, newType) : undefined}
+                />
+              </div>
+            ))}
+          </ResponsiveGridLayout>
+        </div>
       </div>
 
       {showLibrary && (
@@ -264,4 +286,3 @@ export default function DashboardGrid({
     </div>
   );
 }
-
