@@ -175,6 +175,18 @@ function EchartsPanel({ widget, rows, onDrillDown, chartRef }: ChartRendererProp
       onEvents={onEvents}
       style={{ height: "100%", width: "100%" }}
       opts={{ renderer: "canvas" }}
+      onChartReady={(instance: any) => {
+        // WebGL-based series (bar3D/surface, from echarts-gl) can render
+        // completely blank if the container's real pixel dimensions
+        // weren't settled yet at init — a known echarts-gl quirk inside
+        // dynamically-sized layouts like this dashboard's draggable grid,
+        // where a widget's true width/height often isn't known until a
+        // moment after it mounts. A resize kick once rendering has
+        // actually settled fixes it; harmless (and effectively a no-op)
+        // for ordinary 2D charts, so it's applied to every chart rather
+        // than only the GL ones.
+        requestAnimationFrame(() => requestAnimationFrame(() => instance?.resize?.()));
+      }}
     />
   );
 }
