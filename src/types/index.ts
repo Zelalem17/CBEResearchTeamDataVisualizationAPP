@@ -22,6 +22,9 @@ export type WidgetType =
   | "kpi" | "bar" | "line" | "pie" | "area" | "scatter"
   | "histogram" | "heatmap" | "treemap" | "gauge" | "table"
   | "grouped_bar" | "grouped_line" | "category_scatter"
+  // Same chart as "grouped_bar" but with value/% labels defaulted on,
+  // alongside the plain one (which keeps its own show/hide toggle).
+  | "grouped_bar_detailed"
   // "Detailed" variants: same underlying chart as "bar"/"pie", rendered
   // side-by-side with a value + percentage list (config.listPosition:
   // "left" | "right", default "right") so exact numbers are always
@@ -34,7 +37,12 @@ export type WidgetType =
   | "bar_line_series"
   // 3D bar (echarts-gl) and 3D pie (echarts-gl, via a parametric-surface
   // recipe), and a liquid "wave" fill for a single ratio/percentage.
-  | "bar3d" | "pie3d" | "wave";
+  | "bar3d" | "pie3d" | "wave"
+  // Ridgeline ("joyplot": overlapping filled curves, one per category)
+  // and streamgraph (ECharts' native themeRiver: flowing stacked bands
+  // over time) — both good for comparing several categories' shapes/
+  // shares over a shared x-axis at a glance.
+  | "ridgeline" | "streamgraph";
 
 export interface WidgetPosition {
   x: number;
