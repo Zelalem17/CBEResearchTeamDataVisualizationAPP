@@ -10,10 +10,11 @@ interface ReportPanelProps {
 }
 
 /** The dashboard's "Report" section: every KPI ("total") widget, laid
- * out as a real table (Metric / Value / Trend rows) with a thick CBE
- * purple rule down the left edge — not a grid of small boxes, so a long
- * metric name or a big number always has the full row's width to show
- * completely instead of being squeezed into a fixed-width tile.
+ * out as a real table — a responsive 2-column grid of rows (so it's not
+ * one long, single-column list) — each with a thick CBE purple rule down
+ * the left edge only (no border on the other sides, so it reads as a
+ * clean accent, not a boxed-in tile) and full label/value text with
+ * nothing truncated.
  *
  * Deliberately a plain block sitting *above* and *outside* the
  * react-grid-layout grid, not a widget inside it, so it's never
@@ -30,7 +31,7 @@ export default function ReportPanel({ kpiWidgets, rows, onRemove }: ReportPanelP
       </div>
       <div className="h-0.5 bg-gold-500" />
 
-      <div className="divide-y divide-gray-100 dark:divide-gray-800">
+      <div className="p-3 sm:p-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
         {kpiWidgets.map((widget) => {
           const { value, formattedValue, deltaPct } = computeKpiValue(widget, rows);
           const isUp = deltaPct > 0.5;
@@ -39,17 +40,17 @@ export default function ReportPanel({ kpiWidgets, rows, onRemove }: ReportPanelP
             <div
               key={widget.id}
               data-widget-capture={widget.id}
-              // The thick left border is the CBE-color accent the design
-              // calls for — a single rule down the left edge of each row
-              // rather than a border around every side, so it reads as
-              // one continuous report table rather than a stack of boxes.
-              className="group relative flex flex-wrap items-center gap-x-6 gap-y-1 py-3 pl-4 pr-10 border-l-4 border-brand-600 dark:border-brand-500"
+              // Thick left rule in CBE purple, deliberately the *only*
+              // border on the cell — a full box around every side would
+              // read as a stack of small boxes again, which is exactly
+              // what this redesign moved away from.
+              className="group relative flex items-center justify-between gap-3 rounded-lg bg-gray-50 dark:bg-gray-800/50 border-l-4 border-brand-600 dark:border-brand-500 py-3 pl-4 pr-9"
             >
               {onRemove && (
                 <button
                   onClick={() => onRemove(widget.id)}
                   title="Remove metric"
-                  className="capture-hide absolute top-1/2 -translate-y-1/2 right-3 p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/30"
+                  className="capture-hide absolute top-1/2 -translate-y-1/2 right-2.5 p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/30"
                 >
                   <X size={13} />
                 </button>
@@ -57,31 +58,32 @@ export default function ReportPanel({ kpiWidgets, rows, onRemove }: ReportPanelP
 
               {/* Label — wraps fully, never truncated, so a long metric
                   name is always readable end to end. */}
-              <p className="flex-1 min-w-[160px] text-sm font-semibold text-gray-700 dark:text-gray-200 break-words leading-snug">
+              <p className="min-w-0 flex-1 text-sm font-semibold text-gray-700 dark:text-gray-200 break-words leading-snug">
                 {widget.title}
               </p>
 
-              {/* Value — also never truncated; a big number just takes
-                  the room it needs. */}
-              <span
-                className="text-xl sm:text-2xl font-bold text-brand-700 dark:text-gold-400 tabular-nums break-words"
-                title={value.toLocaleString()}
-              >
-                {formattedValue}
-              </span>
-
-              <span
-                className={`flex items-center gap-1 text-xs font-semibold shrink-0 ${
-                  isUp ? "text-emerald-600" : isDown ? "text-rose-600" : "text-gray-400"
-                }`}
-              >
-                {isUp ? <TrendingUp size={13} /> : isDown ? <TrendingDown size={13} /> : <Minus size={13} />}
-                {Math.abs(deltaPct).toFixed(1)}%
-              </span>
+              <div className="flex items-center gap-2 shrink-0">
+                {/* Value — also never truncated; a big number just takes
+                    the room it needs. */}
+                <span
+                  className="text-lg sm:text-xl font-bold text-brand-700 dark:text-gold-400 tabular-nums whitespace-nowrap"
+                  title={value.toLocaleString()}
+                >
+                  {formattedValue}
+                </span>
+                <span
+                  className={`flex items-center gap-0.5 text-xs font-semibold whitespace-nowrap ${
+                    isUp ? "text-emerald-600" : isDown ? "text-rose-600" : "text-gray-400"
+                  }`}
+                >
+                  {isUp ? <TrendingUp size={13} /> : isDown ? <TrendingDown size={13} /> : <Minus size={13} />}
+                  {Math.abs(deltaPct).toFixed(1)}%
+                </span>
+              </div>
             </div>
           );
         })}
       </div>
     </div>
-  ); 
+  );
 }
