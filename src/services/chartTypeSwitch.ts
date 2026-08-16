@@ -27,7 +27,10 @@ export const SWITCHABLE_CHART_TYPES: { type: WidgetType; label: string }[] = [
   { type: "histogram", label: "Histogram" },
   { type: "gauge", label: "Gauge" },
   { type: "grouped_bar", label: "Grouped bar" },
+  { type: "grouped_bar_detailed", label: "Grouped bar (with values)" },
   { type: "grouped_line", label: "Grouped line" },
+  { type: "ridgeline", label: "Ridgeline plot" },
+  { type: "streamgraph", label: "Streamgraph" },
   { type: "category_scatter", label: "Scatter (A vs B)" },
 ];
 const SWITCHABLE_TYPE_SET = new Set(SWITCHABLE_CHART_TYPES.map((t) => t.type));
@@ -75,7 +78,14 @@ export function remapWidgetConfig(widget: Widget, newType: WidgetType): Widget {
     case "grouped_bar":
       config = { x: xField, y: yField, seriesField: seriesField ?? xField, agg, showLabels: !!widget.config?.showLabels, ...carryOver };
       break;
+    case "grouped_bar_detailed":
+      config = { x: xField, y: yField, seriesField: seriesField ?? xField, agg, showLabels: widget.config?.showLabels ?? true, ...carryOver };
+      break;
     case "grouped_line":
+      config = { x: xField, y: yField, seriesField: seriesField ?? xField, agg, ...carryOver };
+      break;
+    case "ridgeline":
+    case "streamgraph":
       config = { x: xField, y: yField, seriesField: seriesField ?? xField, agg, ...carryOver };
       break;
     case "histogram":
