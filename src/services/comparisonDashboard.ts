@@ -182,7 +182,7 @@ export function generatePanelComparisonWidgets(rows: DataRow[], kind?: PanelChar
   });
 
   return packWidgets(widgets, rows);
-}
+} 
 
 /** Re-renders every comparison chart widget (identified by
  * `config.comparisonKey`, set by buildComparisonWidgetSpec above) as the
