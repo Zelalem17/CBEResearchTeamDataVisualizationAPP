@@ -26,7 +26,7 @@ const GRID_COLS = 12;
 const TYPE_RANK: Record<string, number> = {
   kpi: 0, gauge: 1, wave: 2,
   bar: 10, bar_detailed: 11, bar3d: 12, bar_line_combo: 13, bar_line_series: 14, grouped_bar: 15, grouped_bar_detailed: 16,
-  line: 20, area: 21, grouped_line: 22, ridgeline: 23, streamgraph: 24,
+  line: 20, area: 21, grouped_line: 22, ridgeline: 23, streamgraph: 24, radar: 25,
   pie: 30, pie_detailed: 31, pie3d: 32,
   scatter: 40, category_scatter: 41,
   histogram: 50, heatmap: 51, treemap: 52,
