@@ -24,9 +24,12 @@ export function isPanelSchema(rows: DataRow[]): boolean {
  * every comparison chart to the chosen kind at once. */
 export type PanelChartKind =
   | "grouped_bar"
+  | "grouped_bar_detailed"
   | "stacked_bar"
   | "grouped_line"
   | "grouped_area"
+  | "ridgeline"
+  | "streamgraph"
   | "pie"
   | "pie_detailed"
   | "pie3d"
@@ -39,12 +42,15 @@ export type PanelChartKind =
 
 export const PANEL_CHART_KINDS: { kind: PanelChartKind; label: string; description: string }[] = [
   { kind: "grouped_bar", label: "Grouped bar", description: "Categories side-by-side per period" },
+  { kind: "grouped_bar_detailed", label: "Grouped bar (with values)", description: "Grouped bar, values always shown" },
   { kind: "bar_detailed", label: "Bar (values + %)", description: "Bars plus a value/percentage list" },
   { kind: "bar3d", label: "Bar (3D)", description: "Period × category as a 3D bar grid" },
   { kind: "bar_line_series", label: "Bar + line (compare)", description: "CBE as bars, the rest as lines" },
   { kind: "stacked_bar", label: "Stacked bar", description: "Categories stacked per period" },
   { kind: "grouped_line", label: "Grouped line", description: "One trend line per category" },
   { kind: "grouped_area", label: "Grouped area", description: "Filled trend line per category" },
+  { kind: "ridgeline", label: "Ridgeline plot", description: "Overlapping curves, one per category" },
+  { kind: "streamgraph", label: "Streamgraph", description: "Flowing stacked bands over time" },
   { kind: "pie", label: "Pie (share)", description: "Each category's overall share" },
   { kind: "pie_detailed", label: "Pie (values + %)", description: "Pie plus a value/percentage list" },
   { kind: "pie3d", label: "Pie (3D)", description: "Each category's share, in 3D" },
@@ -101,6 +107,12 @@ function buildComparisonWidgetSpec(kind: PanelChartKind, xField: string, section
       return { type: "category_scatter", config: { x: xField, y: "Value", seriesField: "Category", filters, comparisonKey } };
     case "histogram":
       return { type: "histogram", config: { field: "Value", bins: 10, filters, comparisonKey } };
+    case "grouped_bar_detailed":
+      return { type: "grouped_bar_detailed", config: { x: xField, y: "Value", seriesField: "Category", agg: "sum", showLabels: true, filters, comparisonKey } };
+    case "ridgeline":
+      return { type: "ridgeline", config: { x: xField, y: "Value", seriesField: "Category", agg: "sum", filters, comparisonKey } };
+    case "streamgraph":
+      return { type: "streamgraph", config: { x: xField, y: "Value", seriesField: "Category", agg: "sum", filters, comparisonKey } };
     case "grouped_bar":
     default:
       return { type: "grouped_bar", config: { x: xField, y: "Value", seriesField: "Category", agg: "sum", filters, comparisonKey } };
