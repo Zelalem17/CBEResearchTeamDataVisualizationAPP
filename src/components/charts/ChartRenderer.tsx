@@ -19,7 +19,7 @@ const DETAILED_TYPES = new Set(["bar_detailed", "pie_detailed"]);
 // isn't a real pie click target, and a liquid-fill wave isn't
 // categorical at all — so drill-down is skipped for them rather than
 // filtering on a garbage value.
-const NO_DRILLDOWN_TYPES = new Set(["bar3d", "pie3d", "wave"]);
+const NO_DRILLDOWN_TYPES = new Set(["bar3d", "pie3d", "wave", "radar"]);
 
 // echarts-gl (bar3D/surface, ~1MB+ of WebGL machinery) and
 // echarts-liquidfill are only needed by bar3d/pie3d/wave widgets, which
@@ -120,8 +120,12 @@ function ValueList({ data }: { data: { key: string; value: number; pct: number }
 function EchartsPanel({ widget, rows, onDrillDown, chartRef }: ChartRendererProps) {
   const theme = useThemeStore((s) => s.theme);
   const localRef = useRef<any>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const needsExtension = NEEDS_GL.has(widget.type) || NEEDS_LIQUID.has(widget.type);
   const [extensionReady, setExtensionReady] = useState(!needsExtension);
+  // Only gated for GL/liquidfill types — see the ResizeObserver effect
+  // below for why.
+  const [hasRealSize, setHasRealSize] = useState(!needsExtension);
 
   useEffect(() => {
     if (!needsExtension) {
@@ -139,6 +143,40 @@ function EchartsPanel({ widget, rows, onDrillDown, chartRef }: ChartRendererProp
     };
   }, [widget.type, needsExtension]);
 
+  // WebGL-based series (bar3D/surface, from echarts-gl) can render
+  // permanently blank — not just briefly, but for the chart's whole
+  // lifetime, even after a later resize() call — if `echarts.init()`
+  // ever runs against a container that's 0×0 (or hasn't been laid out
+  // yet). That's a real risk here specifically for whichever widgets
+  // happen to be first to mount inside react-grid-layout's draggable
+  // grid, since a grid item's *true* pixel size isn't known until a
+  // moment after it mounts (react-grid-layout's WidthProvider measures
+  // it asynchronously). A plain "wait a frame" delay is a guess; this
+  // instead waits for a real, observed non-zero size before ever
+  // rendering <ReactECharts> for a GL/liquidfill widget, so
+  // echarts.init() only ever happens once there's an actual container
+  // to draw into. Ordinary 2D charts skip this (hasRealSize starts
+  // true for them) since they don't have this failure mode and
+  // shouldn't pay for an extra render pass.
+  useEffect(() => {
+    if (!needsExtension) return;
+    const el = containerRef.current;
+    if (!el) return;
+    setHasRealSize(false);
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const { width, height } = entry.contentRect;
+        if (width > 10 && height > 10) {
+          setHasRealSize(true);
+          observer.disconnect();
+          return;
+        }
+      }
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [needsExtension, widget.id]);
+
   const option: any = useMemo(() => buildOptionForWidget(widget, rows), [widget, rows]);
 
   const onEvents = useMemo(
@@ -153,40 +191,37 @@ function EchartsPanel({ widget, rows, onDrillDown, chartRef }: ChartRendererProp
     [onDrillDown, widget.config, widget.type]
   );
 
-  if (!extensionReady) {
-    return (
-      <div className="h-full w-full flex items-center justify-center text-xs text-gray-400 gap-2">
-        <span className="w-3 h-3 rounded-full border-2 border-gray-300 border-t-brand-500 animate-spin" />
-        Loading chart engine…
-      </div>
-    );
-  }
+  const ready = extensionReady && hasRealSize;
 
   return (
-    <ReactECharts
-      ref={(instance) => {
-        localRef.current = instance;
-        if (chartRef) chartRef.current = instance;
-      }}
-      option={option}
-      theme={theme === "dark" ? "dark" : undefined}
-      notMerge
-      lazyUpdate
-      onEvents={onEvents}
-      style={{ height: "100%", width: "100%" }}
-      opts={{ renderer: "canvas" }}
-      onChartReady={(instance: any) => {
-        // WebGL-based series (bar3D/surface, from echarts-gl) can render
-        // completely blank if the container's real pixel dimensions
-        // weren't settled yet at init — a known echarts-gl quirk inside
-        // dynamically-sized layouts like this dashboard's draggable grid,
-        // where a widget's true width/height often isn't known until a
-        // moment after it mounts. A resize kick once rendering has
-        // actually settled fixes it; harmless (and effectively a no-op)
-        // for ordinary 2D charts, so it's applied to every chart rather
-        // than only the GL ones.
-        requestAnimationFrame(() => requestAnimationFrame(() => instance?.resize?.()));
-      }}
-    />
+    <div ref={containerRef} style={{ height: "100%", width: "100%" }}>
+      {!ready ? (
+        <div className="h-full w-full flex items-center justify-center text-xs text-gray-400 gap-2">
+          <span className="w-3 h-3 rounded-full border-2 border-gray-300 border-t-brand-500 animate-spin" />
+          Loading chart engine…
+        </div>
+      ) : (
+        <ReactECharts
+          ref={(instance) => {
+            localRef.current = instance;
+            if (chartRef) chartRef.current = instance;
+          }}
+          option={option}
+          theme={theme === "dark" ? "dark" : undefined}
+          notMerge
+          lazyUpdate
+          onEvents={onEvents}
+          style={{ height: "100%", width: "100%" }}
+          opts={{ renderer: "canvas" }}
+          onChartReady={(instance: any) => {
+            // Belt-and-braces on top of the ResizeObserver gate above —
+            // one more resize once ECharts itself confirms ready, in
+            // case the grid reflows again right after mount (e.g. other
+            // widgets above it finishing their own layout).
+            requestAnimationFrame(() => requestAnimationFrame(() => instance?.resize?.()));
+          }}
+        />
+      )}
+    </div>
   );
 }
