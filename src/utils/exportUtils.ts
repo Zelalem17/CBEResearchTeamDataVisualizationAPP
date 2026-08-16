@@ -62,6 +62,13 @@ async function captureCanvas(node: HTMLElement): Promise<HTMLCanvasElement> {
     // shrunk down again once embedded in the document.
     scale: 3,
     useCORS: true,
+    // Drag handles and per-widget toolbar buttons are on-screen UI
+    // chrome, not part of the widget's actual content — hide anything
+    // marked .capture-hide (the drag-handle grip icon) so it never shows
+    // up in an exported image. The toolbar buttons don't need the same
+    // treatment: they're already opacity-0 except on hover, and
+    // html2canvas already respects that.
+    ignoreElements: (el) => el.classList?.contains("capture-hide"),
   });
 }
 
@@ -91,7 +98,6 @@ export function exportRowsToExcel(rows: DataRow[], sheetName: string, filename: 
   XLSX.writeFile(workbook, `${filename}.xlsx`);
 }
 
-const MAX_TABLE_WIDGET_ROWS = 60;
 const WIDGET_IMAGE_WIDTH = 560;
 
 export interface ExportableWidget {
@@ -102,25 +108,19 @@ export interface ExportableWidget {
    * and a full-width chart don't both get stamped out at the same fixed
    * width in the Word doc / PDF page. */
   gridW: number;
-  /** Used to route the widget into the report's "Report" (text/table)
-   * section vs its "Charts" (image) section — see TEXT_WIDGET_TYPES
-   * below — and, for "table" widgets, to rebuild the table as real text
-   * instead of a screenshot. */
+  /** Used to route the widget into the report's "Report" (KPI) section
+   * vs its "Charts" (image) section — see TEXT_WIDGET_TYPES below. */
   type: string;
   config: Record<string, any>;
 }
 
-/** Widget types rendered as real, selectable Word text/tables instead of
- * a screenshot: KPI numbers are just a label + a number + a trend — pure
- * text, no reason to be a picture — and a data table is, definitionally,
- * already a table. Everything else (bar, line, pie, gauge, wave, 3D
- * charts, …) is genuinely a graphic and stays an image. */
+/** Widget types rendered as real, selectable Word text instead of a
+ * screenshot: a KPI number is just a label + a number + a trend — pure
+ * text, no reason to be a picture. "table" (raw data table) widgets are
+ * deliberately excluded from the Word report entirely, not converted to
+ * text either — this document is a report (KPI summary + chart images),
+ * not a data export; the Excel button covers the underlying data. */
 const TEXT_WIDGET_TYPES = new Set(["kpi", "table"]);
-
-function applyWidgetFilters(rows: DataRow[], filters?: { field: string; value: string }[]): DataRow[] {
-  if (!filters?.length) return rows;
-  return rows.filter((row) => filters.every((f) => String(row[f.field] ?? "") === String(f.value)));
-}
 
 function sectionHeading(text: string): Paragraph {
   return new Paragraph({
@@ -181,42 +181,6 @@ function buildKpiSummaryTable(kpiWidgets: ExportableWidget[], rows: DataRow[]): 
   return new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: [headerRow, ...bodyRows] });
 }
 
-/** Rebuilds a "table" widget as a real docx Table — same columns, same
- * per-widget filters, and the same row cap the on-screen table paginates
- * through — rather than a screenshot of whatever page happened to be
- * showing. */
-function buildDataTableWidget(widget: ExportableWidget, rows: DataRow[]): (Paragraph | Table)[] {
-  const scoped = applyWidgetFilters(rows, widget.config?.filters);
-  const columns: string[] = widget.config?.columns ?? Object.keys(scoped[0] ?? {});
-  if (!columns.length || !scoped.length) return [];
-  const shown = scoped.slice(0, MAX_TABLE_WIDGET_ROWS);
-
-  const out: (Paragraph | Table)[] = [
-    new Paragraph({
-      children: [new TextRun({ text: widget.title, bold: true, size: 24, font: DOC_FONT, color: BRAND_PURPLE })],
-      heading: HeadingLevel.HEADING_2,
-      spacing: { before: 240, after: 100 },
-    }),
-  ];
-  if (scoped.length > MAX_TABLE_WIDGET_ROWS) {
-    out.push(
-      new Paragraph({
-        children: [
-          new TextRun({
-            text: `Showing the first ${MAX_TABLE_WIDGET_ROWS} of ${scoped.length.toLocaleString()} rows. Use the Excel export for the full dataset.`,
-            italics: true, font: DOC_FONT, color: MUTED_GRAY, size: 16,
-          }),
-        ],
-        spacing: { after: 100 },
-      })
-    );
-  }
-  const headerRow = new TableRow({ tableHeader: true, children: columns.map((c) => tableHeaderCell(c)) });
-  const bodyRows = shown.map((row, i) => new TableRow({ children: columns.map((c) => tableBodyCell(String(row[c] ?? "—"), i % 2 === 1)) }));
-  out.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: [headerRow, ...bodyRows] }));
-  return out;
-}
-
 /** Export a Word (.docx) report: title, then a **Report** section — KPI
  * numbers and data tables rendered as real, selectable Word text/tables
  * — then a **Charts** section with every chart captured and inserted as
@@ -240,7 +204,6 @@ export async function exportDashboardToWord(
   rows: DataRow[]
 ) {
   const kpiWidgets = widgets.filter((w) => w.type === "kpi");
-  const tableWidgets = widgets.filter((w) => w.type === "table");
   const chartWidgets = widgets.filter((w) => !TEXT_WIDGET_TYPES.has(w.type));
 
   const children: (Paragraph | Table)[] = [
@@ -256,21 +219,20 @@ export async function exportDashboardToWord(
     }),
   ];
 
-  // --- Report section: real text/tables, no screenshots ---
-  if (kpiWidgets.length || tableWidgets.length) {
+  // --- Report section: KPI totals as a real table, no screenshots ---
+  // Deliberately doesn't include "table"-type (raw data table) widgets —
+  // this document is a report to read and present (KPI summary + chart
+  // images), not a data export; use the Excel button for the underlying
+  // data.
+  if (kpiWidgets.length) {
     children.push(sectionHeading("Report"));
-    if (kpiWidgets.length) {
-      children.push(
-        new Paragraph({
-          children: [new TextRun({ text: "Key metrics", bold: true, size: 22, font: DOC_FONT, color: INK_GRAY })],
-          spacing: { before: 160, after: 100 },
-        })
-      );
-      children.push(buildKpiSummaryTable(kpiWidgets, rows));
-    }
-    for (const widget of tableWidgets) {
-      children.push(...buildDataTableWidget(widget, rows));
-    }
+    children.push(
+      new Paragraph({
+        children: [new TextRun({ text: "Key metrics", bold: true, size: 22, font: DOC_FONT, color: INK_GRAY })],
+        spacing: { before: 160, after: 100 },
+      })
+    );
+    children.push(buildKpiSummaryTable(kpiWidgets, rows));
   }
 
   // --- Charts section: one screenshot image per widget, each with its own heading ---
