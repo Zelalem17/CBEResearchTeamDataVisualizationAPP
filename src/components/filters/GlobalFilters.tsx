@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react";
-import { Filter, Search, X, Plus } from "lucide-react";
+import { Filter, Search, Plus } from "lucide-react";
 import type { ColumnProfile, FilterRule } from "@/types";
+import FilterChip from "./FilterChip";
 
 interface GlobalFiltersProps {
   columns: ColumnProfile[];
@@ -15,7 +16,8 @@ interface GlobalFiltersProps {
 }
 
 /** Global filter bar: free-text search across all columns, plus structured
- * filter chips (field + operator + value) that apply to every widget on
+ * multi-select filter chips (field + one or more values, e.g. three
+ * different fiscal-year periods at once) that apply to every widget on
  * the active dashboard tab. */
 export default function GlobalFilters({ columns, filters, onChange, searchTerm, onSearchChange, rightSlot }: GlobalFiltersProps) {
   const [showAdd, setShowAdd] = useState(false);
@@ -27,17 +29,25 @@ export default function GlobalFilters({ columns, filters, onChange, searchTerm, 
     const col = columns.find((c) => c.name === draftField);
     if (!col) return;
     const defaultValue = col.stats?.top_categories?.[0]?.value ?? col.sample_values?.[0] ?? "";
+    // Always "in" + an array, even for a single starting value — this is
+    // what lets the chip grow to multiple selections (e.g. picking
+    // 2021/2022, 2022/2023, and 2025/2026 all at once) just by checking
+    // more boxes, rather than being locked to one value at a time.
     onChange([
       ...filters,
-      { id: crypto.randomUUID(), field: draftField, operator: "equals", value: defaultValue },
+      { id: crypto.randomUUID(), field: draftField, operator: "in", value: [defaultValue] },
     ]);
     setShowAdd(false);
   };
 
   const removeFilter = (id: string) => onChange(filters.filter((f) => f.id !== id));
 
-  const updateFilterValue = (id: string, value: any) =>
-    onChange(filters.map((f) => (f.id === id ? { ...f, value } : f)));
+  const updateFilterValue = (id: string, value: string[] | string) =>
+    onChange(
+      filters.map((f) =>
+        f.id === id ? { ...f, operator: Array.isArray(value) ? "in" : "equals", value } : f
+      )
+    );
 
   return (
     <div className="card p-3 flex flex-wrap items-center gap-2">
@@ -57,29 +67,15 @@ export default function GlobalFilters({ columns, filters, onChange, searchTerm, 
 
       {filters.map((f) => {
         const col = columns.find((c) => c.name === f.field);
-        const options = col?.stats?.top_categories?.map((t: any) => t.value) ?? [];
+        const options: string[] = col?.stats?.top_categories?.map((t: any) => String(t.value)) ?? [];
         return (
-          <div key={f.id} className="flex items-center gap-1 bg-brand-50 dark:bg-brand-900/40 text-brand-700 dark:text-brand-300 rounded-full pl-3 pr-1 py-1 text-xs font-medium">
-            <span>{f.field}:</span>
-            {options.length ? (
-              <select
-                className="bg-transparent outline-none text-xs font-semibold"
-                value={f.value}
-                onChange={(e) => updateFilterValue(f.id, e.target.value)}
-              >
-                {options.map((opt: string) => <option key={opt} value={opt}>{opt}</option>)}
-              </select>
-            ) : (
-              <input
-                className="bg-transparent outline-none text-xs font-semibold w-20"
-                value={f.value}
-                onChange={(e) => updateFilterValue(f.id, e.target.value)}
-              />
-            )}
-            <button onClick={() => removeFilter(f.id)} className="p-0.5 rounded-full hover:bg-brand-200 dark:hover:bg-brand-800">
-              <X size={12} />
-            </button>
-          </div>
+          <FilterChip
+            key={f.id}
+            filter={f}
+            options={options}
+            onChange={(value) => updateFilterValue(f.id, value)}
+            onRemove={() => removeFilter(f.id)}
+          />
         );
       })}
 
