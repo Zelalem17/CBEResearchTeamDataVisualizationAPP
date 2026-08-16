@@ -1,7 +1,7 @@
 import { useState } from "react";
 import {
   X, BarChart3, LineChart, PieChart, ScatterChart, AreaChart, Gauge, Grid3x3, Table2, Activity, TrendingUp,
-  ListOrdered, Box, Waves, GitCompare,
+  ListOrdered, Box, Waves, GitCompare, Mountain, Layers,
 } from "lucide-react";
 import type { ColumnProfile, Widget, WidgetType } from "@/types";
 
@@ -16,12 +16,15 @@ const WIDGET_TYPES: { type: WidgetType; label: string; icon: any }[] = [
   { type: "bar", label: "Bar chart", icon: BarChart3 },
   { type: "bar_detailed", label: "Bar chart (values + %)", icon: ListOrdered },
   { type: "grouped_bar", label: "Grouped bar (compare)", icon: BarChart3 },
+  { type: "grouped_bar_detailed", label: "Grouped bar (with values)", icon: ListOrdered },
   { type: "bar_line_combo", label: "Bar + line (Pareto)", icon: GitCompare },
   { type: "bar_line_series", label: "Bar + line (compare)", icon: GitCompare },
   { type: "bar3d", label: "3D bar (compare)", icon: Box },
   { type: "line", label: "Line chart", icon: LineChart },
   { type: "grouped_line", label: "Grouped line (compare)", icon: LineChart },
   { type: "area", label: "Area chart", icon: Activity },
+  { type: "ridgeline", label: "Ridgeline plot", icon: Mountain },
+  { type: "streamgraph", label: "Streamgraph", icon: Layers },
   { type: "pie", label: "Pie chart", icon: PieChart },
   { type: "pie_detailed", label: "Pie chart (values + %)", icon: ListOrdered },
   { type: "pie3d", label: "3D pie chart", icon: Box },
@@ -51,9 +54,10 @@ const DEFAULT_SIZE: Partial<Record<WidgetType, { w: number; h: number }>> = {
   kpi: { w: 3, h: 2 }, bar: { w: 6, h: 5 }, line: { w: 6, h: 5 }, area: { w: 6, h: 5 },
   pie: { w: 5, h: 5 }, scatter: { w: 6, h: 5 }, histogram: { w: 5, h: 5 },
   heatmap: { w: 6, h: 5 }, treemap: { w: 6, h: 5 }, gauge: { w: 3, h: 3 }, table: { w: 12, h: 6 },
-  grouped_bar: { w: 6, h: 5 }, grouped_line: { w: 6, h: 5 }, category_scatter: { w: 6, h: 5 },
+  grouped_bar: { w: 6, h: 5 }, grouped_bar_detailed: { w: 6, h: 6 }, grouped_line: { w: 6, h: 5 }, category_scatter: { w: 6, h: 5 },
   bar_detailed: { w: 9, h: 5 }, pie_detailed: { w: 9, h: 5 },
-  bar_line_combo: { w: 7, h: 6 }, bar_line_series: { w: 7, h: 6 }, bar3d: { w: 7, h: 6 }, pie3d: { w: 6, h: 6 }, wave: { w: 4, h: 4 },
+  bar_line_combo: { w: 6, h: 6 }, bar_line_series: { w: 6, h: 6 }, bar3d: { w: 6, h: 6 }, pie3d: { w: 6, h: 6 }, wave: { w: 4, h: 4 },
+  ridgeline: { w: 6, h: 6 }, streamgraph: { w: 6, h: 5 },
 };
 
 /** Modal used to add a new widget to the dashboard: pick a chart type,
@@ -87,7 +91,10 @@ export default function WidgetLibraryModal({ columns, onAdd, onClose }: WidgetLi
       case "treemap": widget = { ...base, title: `${fieldB} breakdown`, config: { levels: [fieldA], value: fieldB } }; break;
       case "gauge": widget = { ...base, title: `${fieldB} (avg)`, config: { field: fieldB, agg: "avg" } }; break;
       case "table": widget = { ...base, title: "Data table", config: { columns: columns.map((c) => c.name), page_size: 25 } }; break;
-      case "grouped_bar": case "grouped_line": case "category_scatter": case "bar3d": case "bar_line_series":
+      case "grouped_bar_detailed":
+        widget = { ...base, title: `${fieldB} by ${fieldA}, compared by ${fieldC}`, config: { x: fieldA, y: fieldB, seriesField: fieldC, agg: "sum", showLabels: true } };
+        break;
+      case "grouped_bar": case "grouped_line": case "category_scatter": case "bar3d": case "bar_line_series": case "ridgeline": case "streamgraph":
         widget = { ...base, title: `${fieldB} by ${fieldA}, compared by ${fieldC}`, config: { x: fieldA, y: fieldB, seriesField: fieldC, agg: "sum" } };
         break;
       default: widget = { ...base, title: `${fieldB} by ${fieldA}`, config: { x: fieldA, y: fieldB, agg: "sum" } };
@@ -146,7 +153,7 @@ export default function WidgetLibraryModal({ columns, onAdd, onClose }: WidgetLi
                 </div>
               </>
             )}
-            {(selected === "grouped_bar" || selected === "grouped_line" || selected === "category_scatter" || selected === "bar3d" || selected === "bar_line_series") && (
+            {(["grouped_bar", "grouped_bar_detailed", "grouped_line", "category_scatter", "bar3d", "bar_line_series", "ridgeline", "streamgraph"] as WidgetType[]).includes(selected) && (
               <div className="col-span-2">
                 <label className="text-xs text-gray-500 mb-1 block">Compare by (series)</label>
                 <select className="input text-sm" value={fieldC} onChange={(e) => setFieldC(e.target.value)}>
