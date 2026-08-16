@@ -35,9 +35,9 @@ interface WidgetCardProps {
 // Bar and grouped-bar are clean by default; pie already always shows its
 // own value+percent (that one isn't toggleable — it's just how pie
 // reads). This is the set of types where the toggle button applies.
-const LABEL_TOGGLEABLE_TYPES = new Set(["bar", "bar_detailed", "grouped_bar", "line", "area", "grouped_line", "bar_line_series"]);
+const LABEL_TOGGLEABLE_TYPES = new Set(["bar", "bar_detailed", "grouped_bar", "grouped_bar_detailed", "line", "area", "grouped_line", "bar_line_series"]);
 const SYMBOL_TOGGLEABLE_TYPES = new Set(["line", "area", "grouped_line", "bar_line_series"]);
-const BAR_STYLE_TOGGLEABLE_TYPES = new Set(["bar", "bar_detailed", "grouped_bar", "bar_line_combo", "bar_line_series"]);
+const BAR_STYLE_TOGGLEABLE_TYPES = new Set(["bar", "bar_detailed", "grouped_bar", "grouped_bar_detailed", "bar_line_combo", "bar_line_series"]);
 const PIE_STYLE_TOGGLEABLE_TYPES = new Set(["pie", "pie_detailed"]);
 
 const SYMBOL_ICONS: Record<string, any> = { circle: Circle, diamond: Diamond, rect: Square, triangle: Triangle };
@@ -79,7 +79,7 @@ export default function WidgetCard({
     <div ref={nodeRef} data-widget-capture={widget.id} className="card h-full flex flex-col overflow-hidden group">
       <div className={`widget-drag-handle flex items-start justify-between gap-2 px-3 py-2 border-b border-gray-100 dark:border-gray-800 ${onRemove ? "cursor-move" : ""}`}>
         <div className="flex items-start gap-1.5 min-w-0">
-          {onRemove && <GripVertical size={14} className="text-gray-300 dark:text-gray-600 shrink-0 mt-0.5" />}
+          {onRemove && <GripVertical size={14} className="capture-hide text-gray-300 dark:text-gray-600 shrink-0 mt-0.5" />}
           {/* Title wraps instead of truncating with an ellipsis — a
               clipped title on screen was also what ended up baked into
               the PNG/Word/PDF exports, since those capture this same
@@ -88,7 +88,7 @@ export default function WidgetCard({
             {widget.title}
           </span>
         </div>
-        <div className="widget-no-drag flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+        <div className="widget-no-drag capture-hide flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
           {showTypeSwitch && (
             <div className="relative flex items-center" title="Change chart type">
               <Repeat size={12} className="pointer-events-none absolute left-1.5 text-gray-400" />
