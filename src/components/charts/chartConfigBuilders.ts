@@ -915,14 +915,15 @@ export function computeAutoFitSize(widget: Widget, rows: DataRow[]): { w: number
       if (n > 6) h += 1; // rotated x-axis labels need more vertical room
       if (n > 10) h += 1;
       if (config.showLabels) h += 1; // on-bar value+% chips need headroom too
-      // Snapped to half (6) or full (12) width of the 12-column grid,
-      // rather than intermediate steps — half-width is what lets two
-      // charts sit side by side in one row (the common case); a chart
-      // only escalates to full width once it has more categories than
-      // comfortably fit at half-width without the labels themselves
-      // getting cramped or cut off (n > 6 is also exactly where the
-      // chart's own x-axis labels switch to rotated, above).
-      const w = n > 6 ? 12 : widget.type === "bar_detailed" ? 9 : 6;
+      // Always half the grid width (6 of 12 columns) — this is what lets
+      // two charts sit side by side in one row by default. Deliberately
+      // doesn't escalate to full width just because a chart has a lot of
+      // categories (height already grows for that, above); if someone
+      // wants a bigger view of a dense chart, that's what the maximize
+      // button on the widget is for, rather than every dense chart
+      // permanently claiming a full row and breaking the 2-per-row
+      // layout for everything after it.
+      const w = widget.type === "bar_detailed" ? 9 : 6;
       return { w, h };
     }
     case "pie":
@@ -935,21 +936,18 @@ export function computeAutoFitSize(widget: Widget, rows: DataRow[]): { w: number
       return { w, h };
     }
     case "grouped_bar":
+    case "grouped_bar_detailed":
     case "grouped_line":
     case "bar_line_series": {
       if (!config.x || !config.seriesField) return null;
       const xCount = new Set(scoped.map((r) => String(r[config.x] ?? "—"))).size;
-      const seriesCount = new Set(scoped.map((r) => String(r[config.seriesField] ?? "—"))).size;
       let h = 5;
       if (xCount > 6) h += 1;
       if (xCount > 10) h += 1;
       if (widget.type !== "grouped_line" && config.showLabels) h += 1;
-      // Half-width by default (pairs two per row); escalates to full
-      // width once there's enough total bars/points (x categories ×
-      // series) that half-width would start cramming them together.
-      const bars = xCount * seriesCount;
-      const w = bars > 12 ? 12 : 6;
-      return { w, h };
+      // Always half-width — see the "bar" case above for why this
+      // doesn't scale up with data density anymore.
+      return { w: 6, h };
     }
     case "heatmap":
     case "treemap":
@@ -959,8 +957,7 @@ export function computeAutoFitSize(widget: Widget, rows: DataRow[]): { w: number
       const n = groupAndAgg(scoped, config.x, config.y, config.agg ?? "sum").slice(0, 15).length;
       let h = 6; // dual y-axis + legend needs a bit more than a plain bar
       if (n > 8) h += 1;
-      const w = n > 8 ? 12 : 6;
-      return { w, h };
+      return { w: 6, h };
     }
     case "bar3d":
       return { w: 6, h: 6 }; // half-width still leaves room for the 3D viewport
@@ -968,6 +965,13 @@ export function computeAutoFitSize(widget: Widget, rows: DataRow[]): { w: number
       return { w: 6, h: 6 };
     case "wave":
       return { w: 4, h: 4 }; // compact, square-ish like a gauge
+    case "ridgeline": {
+      if (!config.x || !config.seriesField) return null;
+      const seriesCount = new Set(scoped.map((r) => String(r[config.seriesField] ?? "—"))).size;
+      return { w: 6, h: Math.max(5, Math.min(9, 4 + Math.ceil(seriesCount / 2))) };
+    }
+    case "streamgraph":
+      return { w: 6, h: 5 };
     default:
       return null;
   }
@@ -981,6 +985,112 @@ export function computeAutoFitSize(widget: Widget, rows: DataRow[]): { w: number
  * letting TS infer a big union of literal-typed branches — is what lets
  * `<ReactECharts option={...}>` (typed against core echarts' option
  * shape) accept it without a strict literal-type mismatch at build time. */
+/** A ridgeline / "joyplot" — one smoothed, semi-transparent, filled
+ * curve per category (config.seriesField, e.g. a Section or Category),
+ * each stacked with a fixed vertical offset from the one below it on a
+ * shared x-axis (config.x) — the classic overlapping-hills look, good
+ * for comparing several distributions/trends' shapes at a glance rather
+ * than their exact values. ECharts has no native ridgeline series type;
+ * this is the standard technique for one (an area line per category,
+ * value-shifted so they stack visually without literally being stacked
+ * data). Category values are normalized to 0–1 within each series
+ * first, so a category with much bigger raw numbers doesn't just
+ * flatten every other row. */
+export function buildRidgelineOption(rows: DataRow[], config: any) {
+  const scoped = applyConfigFilters(rows, config);
+  const xField = config.x;
+  const seriesField = config.seriesField;
+  const valueField = config.y;
+  const agg = config.agg ?? "sum";
+
+  const xValues = Array.from(new Set(scoped.map((r) => String(r[xField] ?? "—")))).sort();
+  const seriesValues = sortCbeFirst(Array.from(new Set(scoped.map((r) => String(r[seriesField] ?? "—"))))).slice(0, 10);
+  const colorMap = assignSeriesColors(seriesValues);
+
+  const rawSeries = seriesValues.map((sv) =>
+    xValues.map((xv) => {
+      const matching = scoped.filter((r) => String(r[xField] ?? "—") === xv && String(r[seriesField] ?? "—") === sv);
+      const vals = matching.map((r) => Number(r[valueField])).filter(Number.isFinite);
+      return vals.length ? aggValues(vals, agg) : null;
+    })
+  );
+
+  const OFFSET_STEP = 1.15;
+  // Reversed so the first category (CBE, via sortCbeFirst) draws on top,
+  // at the front/bottom of the ridge stack, rather than being hidden
+  // behind everything else.
+  const series = seriesValues
+    .map((sv, i) => {
+      const raw = rawSeries[i];
+      const finite = raw.filter((v): v is number => v !== null);
+      const max = finite.length ? Math.max(...finite, 0.0001) : 1;
+      const offset = (seriesValues.length - 1 - i) * OFFSET_STEP;
+      const color = colorMap[sv];
+      return {
+        name: sv,
+        type: "line" as const,
+        data: raw.map((v) => (v === null ? null : Math.round((offset + v / max) * 1000) / 1000)),
+        smooth: true,
+        symbol: "none",
+        z: i,
+        lineStyle: { width: 1.5, color },
+        areaStyle: { color, opacity: 0.55 },
+        emphasis: { focus: "series" },
+      };
+    })
+    .reverse();
+
+  return {
+    tooltip: { trigger: "axis", backgroundColor: "rgba(17,24,39,0.92)", borderWidth: 0, textStyle: { color: "#fff" } },
+    legend: { bottom: 0, textStyle: { fontSize: 11 }, data: seriesValues },
+    grid: { left: 8, right: 24, top: 20, bottom: 56, containLabel: true },
+    xAxis: { type: "category", data: xValues, boundaryGap: false, axisLabel: { rotate: xValues.length > 6 ? 30 : 0 } },
+    yAxis: { type: "value", show: false },
+    series,
+  };
+}
+
+/** Streamgraph: ECharts' native `themeRiver` series — flowing, stacked,
+ * symmetric-around-the-centerline bands, one per category
+ * (config.seriesField) over time (config.x) — good for showing how each
+ * category's share of the whole shifts over the timeline. */
+export function buildStreamgraphOption(rows: DataRow[], config: any) {
+  const scoped = applyConfigFilters(rows, config);
+  const xField = config.x;
+  const seriesField = config.seriesField;
+  const valueField = config.y;
+  const agg = config.agg ?? "sum";
+
+  const xValues = Array.from(new Set(scoped.map((r) => String(r[xField] ?? "—")))).sort();
+  const seriesValues = sortCbeFirst(Array.from(new Set(scoped.map((r) => String(r[seriesField] ?? "—")))));
+  const colorMap = assignSeriesColors(seriesValues);
+
+  const data: [string, number, string][] = [];
+  for (const xv of xValues) {
+    for (const sv of seriesValues) {
+      const matching = scoped.filter((r) => String(r[xField] ?? "—") === xv && String(r[seriesField] ?? "—") === sv);
+      const vals = matching.map((r) => Number(r[valueField])).filter(Number.isFinite);
+      data.push([xv, vals.length ? Math.round(aggValues(vals, agg) * 100) / 100 : 0, sv]);
+    }
+  }
+
+  return {
+    tooltip: { trigger: "axis", backgroundColor: "rgba(17,24,39,0.92)", borderWidth: 0, textStyle: { color: "#fff" } },
+    legend: { bottom: 0, textStyle: { fontSize: 11 }, data: seriesValues },
+    singleAxis: {
+      type: "category", data: xValues, top: 20, bottom: 56, left: 8, right: 24,
+      axisLabel: { rotate: xValues.length > 6 ? 30 : 0 },
+    },
+    series: [{
+      type: "themeRiver",
+      data,
+      color: seriesValues.map((sv) => colorMap[sv]),
+      label: { show: false },
+      emphasis: { focus: "series" },
+    }],
+  };
+}
+
 export function buildOptionForWidget(widget: Widget, rows: DataRow[]): any {
   switch (widget.type) {
     case "bar": return buildBarOption(rows, widget.config);
@@ -990,6 +1100,10 @@ export function buildOptionForWidget(widget: Widget, rows: DataRow[]): any {
     // getWidgetListData above).
     case "bar_detailed": return buildBarOption(rows, widget.config);
     case "grouped_bar": return buildGroupedBarOption(rows, widget.config);
+    // Same chart as "grouped_bar", just with the value/% labels defaulted
+    // on instead of off — the "additional" always-shows-values grouped
+    // bar, sitting alongside the plain one (which keeps its own toggle).
+    case "grouped_bar_detailed": return buildGroupedBarOption(rows, { ...widget.config, showLabels: widget.config?.showLabels ?? true });
     case "grouped_line": return buildGroupedLineOption(rows, widget.config);
     case "line": return buildLineOption(rows, widget.config, false);
     case "area": return buildLineOption(rows, widget.config, true);
@@ -1006,6 +1120,8 @@ export function buildOptionForWidget(widget: Widget, rows: DataRow[]): any {
     case "bar_line_series": return buildBarLineSeriesOption(rows, widget.config);
     case "bar3d": return buildBar3DOption(rows, widget.config);
     case "pie3d": return buildPie3DOption(rows, widget.config);
+    case "ridgeline": return buildRidgelineOption(rows, widget.config);
+    case "streamgraph": return buildStreamgraphOption(rows, widget.config);
     default: return {};
   }
 }
