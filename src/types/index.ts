@@ -42,7 +42,10 @@ export type WidgetType =
   // and streamgraph (ECharts' native themeRiver: flowing stacked bands
   // over time) — both good for comparing several categories' shapes/
   // shares over a shared x-axis at a glance.
-  | "ridgeline" | "streamgraph";
+  | "ridgeline" | "streamgraph"
+  // Radar: one axis per metric, one colored shape per comparison
+  // category — good for comparing several metrics' balance at once.
+  | "radar";
 
 export interface WidgetPosition {
   x: number;
