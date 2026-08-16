@@ -6,19 +6,21 @@ import type { DataRow, Widget } from "@/types";
  */
 
 // Commercial Bank of Ethiopia identity: deep purple as the primary
-// brand color, warm gold as the accent, with near-black/charcoal and
-// soft neutrals rounding out a palette that reads as "CBE" rather than
-// a generic rainbow — every chart in the app draws its category colors
-// from this set. Mirrors tailwind.config.js's brand/gold scales.
+// brand color, warm gold as the accent, rounded out with vivid teal,
+// rose, and emerald accents for extra categories — deliberately no
+// near-black, charcoal, or gray entries: a muted dark neutral is the
+// one color that reads as "disabled"/invisible on a dark background and
+// washes out on white, so every category (including the 3rd, 4th, ...)
+// gets its own genuinely distinct, attractive color instead.
 const PALETTE = [
   "#5b2a83", // brand purple 600 — primary
   "#f2a900", // gold 500 — accent
-  "#2a1339", // brand purple 900 — near-black plum
   "#8f5cc4", // brand purple 400 — lighter purple
+  "#0ea5a4", // teal
   "#cc8b00", // gold 600 — deeper gold
-  "#4a2169", // brand purple 700
-  "#fbc94d", // gold 300 — light gold
-  "#1f2937", // charcoal — neutral for extra categories
+  "#e11d48", // rose
+  "#a78bfa", // violet
+  "#059669", // emerald
 ];
 
 // This app is for the Commercial Bank of Ethiopia — whenever a bar,
@@ -32,12 +34,16 @@ export function isCbeLabel(label: string): boolean {
   return /cbe/i.test(label);
 }
 // Colors for everything that ISN'T CBE — deliberately contains no
-// purple at all, since purple is reserved exclusively for CBE. Leads
-// with gold (CBE's own accent color) so the common two-way "CBE vs
-// Industry" comparison reads as a clean purple-vs-gold pair; a third+
-// non-CBE category (e.g. a second competitor bank) falls through to the
-// remaining tones instead of repeating gold.
-const NON_CBE_COLORS = ["#f2a900", "#1f2937", "#0f766e", "#cc8b00", "#7c8a99", "#a16207"];
+// purple (reserved exclusively for CBE) and no black/gray/white tones
+// either: a muted charcoal or slate reads as "disabled" or fades away
+// entirely on a dark background, and washes out on a plain white one,
+// so every non-CBE entity gets its own genuinely distinct, vivid color
+// instead. Leads with gold (CBE's own accent color) so the common
+// two-way "CBE vs Industry" comparison reads as a clean purple-vs-gold
+// pair; a third, fourth, etc. non-CBE category (e.g. other competitor
+// banks) each get their own bright, clearly different hue rather than
+// repeating gold or fading into a dull neutral.
+const NON_CBE_COLORS = ["#f2a900", "#0ea5a4", "#e11d48", "#6366f1", "#db2777", "#059669", "#f97316", "#0284c7"];
 
 /** Assigns every name in `names` a color: anything matching "CBE" always
  * gets the brand purple; everything else gets the next unused color
@@ -972,6 +978,8 @@ export function computeAutoFitSize(widget: Widget, rows: DataRow[]): { w: number
     }
     case "streamgraph":
       return { w: 6, h: 5 };
+    case "radar":
+      return { w: 6, h: 6 }; // needs to stay roughly square to read well
     default:
       return null;
   }
@@ -1091,6 +1099,58 @@ export function buildStreamgraphOption(rows: DataRow[], config: any) {
   };
 }
 
+/** Radar chart: one indicator (axis) per distinct value of config.x
+ * (e.g. Metric/Section), one colored shape per comparison category
+ * (config.seriesField, e.g. CBE vs Industry) — good for comparing
+ * several metrics' relative shape/balance across categories at a
+ * glance, rather than their exact values. Each indicator's scale maxes
+ * out at 1.15× the largest value seen for it (across every series), so
+ * one outsized metric doesn't flatten all the others down to nothing. */
+export function buildRadarOption(rows: DataRow[], config: any) {
+  const scoped = applyConfigFilters(rows, config);
+  const xField = config.x;
+  const seriesField = config.seriesField;
+  const valueField = config.y;
+  const agg = config.agg ?? "sum";
+
+  const indicators = Array.from(new Set(scoped.map((r) => String(r[xField] ?? "—")))).slice(0, 12);
+  const seriesValues = sortCbeFirst(Array.from(new Set(scoped.map((r) => String(r[seriesField] ?? "—")))));
+  const colorMap = assignSeriesColors(seriesValues);
+
+  const maxByIndicator = indicators.map((ind) => {
+    const vals = scoped.filter((r) => String(r[xField] ?? "—") === ind).map((r) => Number(r[valueField])).filter(Number.isFinite);
+    return vals.length ? Math.max(...vals) * 1.15 || 1 : 1;
+  });
+
+  const seriesData = seriesValues.map((sv) => {
+    const color = colorMap[sv];
+    const value = indicators.map((ind) => {
+      const matching = scoped.filter((r) => String(r[xField] ?? "—") === ind && String(r[seriesField] ?? "—") === sv);
+      const vals = matching.map((r) => Number(r[valueField])).filter(Number.isFinite);
+      return vals.length ? Math.round(aggValues(vals, agg) * 100) / 100 : 0;
+    });
+    return {
+      name: sv, value,
+      itemStyle: { color }, lineStyle: { color, width: 2 }, areaStyle: { color, opacity: 0.15 },
+    };
+  });
+
+  return {
+    tooltip: { trigger: "item", backgroundColor: "rgba(17,24,39,0.92)", borderWidth: 0, textStyle: { color: "#fff" } },
+    legend: { bottom: 0, textStyle: { fontSize: 11 }, data: seriesValues },
+    radar: {
+      indicator: indicators.map((name, i) => ({ name, max: maxByIndicator[i] })),
+      radius: "62%",
+      center: ["50%", "48%"],
+      splitArea: { areaStyle: { color: ["rgba(91,42,131,0.03)", "rgba(91,42,131,0.07)"] } },
+      axisLine: { lineStyle: { color: "#e5e7eb" } },
+      splitLine: { lineStyle: { color: "#e5e7eb" } },
+      axisName: { fontSize: 10, color: "#6b7280" },
+    },
+    series: [{ type: "radar", data: seriesData }],
+  };
+}
+
 export function buildOptionForWidget(widget: Widget, rows: DataRow[]): any {
   switch (widget.type) {
     case "bar": return buildBarOption(rows, widget.config);
@@ -1122,6 +1182,7 @@ export function buildOptionForWidget(widget: Widget, rows: DataRow[]): any {
     case "pie3d": return buildPie3DOption(rows, widget.config);
     case "ridgeline": return buildRidgelineOption(rows, widget.config);
     case "streamgraph": return buildStreamgraphOption(rows, widget.config);
+    case "radar": return buildRadarOption(rows, widget.config);
     default: return {};
   }
 }
