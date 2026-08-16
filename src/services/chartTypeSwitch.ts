@@ -31,6 +31,7 @@ export const SWITCHABLE_CHART_TYPES: { type: WidgetType; label: string }[] = [
   { type: "grouped_line", label: "Grouped line" },
   { type: "ridgeline", label: "Ridgeline plot" },
   { type: "streamgraph", label: "Streamgraph" },
+  { type: "radar", label: "Radar chart" },
   { type: "category_scatter", label: "Scatter (A vs B)" },
 ];
 const SWITCHABLE_TYPE_SET = new Set(SWITCHABLE_CHART_TYPES.map((t) => t.type));
@@ -86,6 +87,7 @@ export function remapWidgetConfig(widget: Widget, newType: WidgetType): Widget {
       break;
     case "ridgeline":
     case "streamgraph":
+    case "radar":
       config = { x: xField, y: yField, seriesField: seriesField ?? xField, agg, ...carryOver };
       break;
     case "histogram":
