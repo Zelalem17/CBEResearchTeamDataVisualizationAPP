@@ -83,5 +83,5 @@ export default function ReportPanel({ kpiWidgets, rows, onRemove }: ReportPanelP
         })}
       </div>
     </div>
-  );
+  ); 
 }
