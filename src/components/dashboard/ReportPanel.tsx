@@ -1,5 +1,7 @@
+import { useMemo } from "react";
 import { FileBarChart, TrendingUp, TrendingDown, Minus, X } from "lucide-react";
 import { computeKpiValue } from "@/components/kpi/KpiCard";
+import { assignSeriesColors, CBE_BRAND_PURPLE } from "@/components/charts/chartConfigBuilders";
 import type { DataRow, Widget } from "@/types";
 
 interface ReportPanelProps {
@@ -9,18 +11,39 @@ interface ReportPanelProps {
   onRemove?: (id: string) => void;
 }
 
+/** A KPI created by the CBE-vs-Industry comparison generator carries a
+ * `{ field: "Category", value: "CBE" | "Industry" | ... }` prefilter —
+ * this pulls that value out so the metric's left-border color can match
+ * whatever color that same category gets in the charts. Returns null
+ * for KPIs with no category prefilter (a plain "Total X" metric not
+ * scoped to any one entity), which fall back to CBE purple. */
+function kpiCategoryLabel(widget: Widget): string | null {
+  const filters = widget.config?.filters as { field: string; value: string }[] | undefined;
+  const match = filters?.find((f) => f.field.toLowerCase() === "category");
+  return match ? String(match.value) : null;
+}
+
 /** The dashboard's "Report" section: every KPI ("total") widget, laid
  * out as a real table — a responsive 2-column grid of rows (so it's not
- * one long, single-column list) — each with a thick CBE purple rule down
- * the left edge only (no border on the other sides, so it reads as a
- * clean accent, not a boxed-in tile) and full label/value text with
- * nothing truncated.
+ * one long, single-column list) — each with a thick left rule and full
+ * label/value text with nothing truncated.
+ *
+ * The left rule's color matches whatever color that KPI's own category
+ * gets in the charts (CBE purple, each other bank/category its own
+ * distinct color from the same shared palette — see
+ * chartConfigBuilders.ts's assignSeriesColors) rather than every row
+ * defaulting to plain purple regardless of which entity it's about.
  *
  * Deliberately a plain block sitting *above* and *outside* the
  * react-grid-layout grid, not a widget inside it, so it's never
  * draggable and always the first thing on the page; the chart grid
  * starts on its own line right below it. */
 export default function ReportPanel({ kpiWidgets, rows, onRemove }: ReportPanelProps) {
+  const colorByCategory = useMemo(() => {
+    const labels = kpiWidgets.map(kpiCategoryLabel).filter((l): l is string => l !== null);
+    return assignSeriesColors(labels);
+  }, [kpiWidgets]);
+
   if (!kpiWidgets.length) return null;
 
   return (
@@ -36,15 +59,19 @@ export default function ReportPanel({ kpiWidgets, rows, onRemove }: ReportPanelP
           const { value, formattedValue, deltaPct } = computeKpiValue(widget, rows);
           const isUp = deltaPct > 0.5;
           const isDown = deltaPct < -0.5;
+          const category = kpiCategoryLabel(widget);
+          const accentColor = category ? colorByCategory[category] ?? CBE_BRAND_PURPLE : CBE_BRAND_PURPLE;
           return (
             <div
               key={widget.id}
               data-widget-capture={widget.id}
-              // Thick left rule in CBE purple, deliberately the *only*
-              // border on the cell — a full box around every side would
-              // read as a stack of small boxes again, which is exactly
-              // what this redesign moved away from.
-              className="group relative flex items-center justify-between gap-3 rounded-lg bg-gray-50 dark:bg-gray-800/50 border-l-4 border-brand-600 dark:border-brand-500 py-3 pl-4 pr-9"
+              // Thick left rule, deliberately the *only* border on the
+              // cell — a full box around every side would read as a
+              // stack of small boxes again, which is exactly what this
+              // redesign moved away from. Color is set inline since it's
+              // per-entity and can't be a static Tailwind class.
+              style={{ borderLeftColor: accentColor }}
+              className="group relative flex items-center justify-between gap-3 rounded-lg bg-gray-50 dark:bg-gray-800/50 border-l-4 py-3 pl-4 pr-9"
             >
               {onRemove && (
                 <button
