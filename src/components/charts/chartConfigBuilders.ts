@@ -29,7 +29,7 @@ const PALETTE = [
 // own brand purple rather than whatever color the palette would
 // otherwise assign it, so CBE's own figures are instantly identifiable
 // on every chart. Matches tailwind's brand-600.
-const CBE_BRAND_PURPLE = "#5b2a83";
+export const CBE_BRAND_PURPLE = "#5b2a83";
 export function isCbeLabel(label: string): boolean {
   return /cbe/i.test(label);
 }
@@ -56,7 +56,7 @@ const NON_CBE_COLORS = ["#f2a900", "#0ea5a4", "#e11d48", "#6366f1", "#db2777", "
  * so both series render purple. Assigning colors by category identity
  * instead of array position guarantees CBE is always uniquely purple
  * and nothing else ever is, regardless of sort order. */
-function assignSeriesColors(names: string[]): Record<string, string> {
+export function assignSeriesColors(names: string[]): Record<string, string> {
   const map: Record<string, string> = {};
   let nonCbeIdx = 0;
   for (const name of names) {
