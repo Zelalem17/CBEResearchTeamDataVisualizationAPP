@@ -178,3 +178,128 @@ export function reshapePanelSheet(aoa: any[][]): PanelReshapeResult {
     meta: { periodField, categoryField, sections, metrics: Array.from(metricsSeen) },
   };
 }
+
+/** Detects and reshapes "wide, one-column-per-period" sheets — a very
+ * common layout for manually-built bank/finance spreadsheets:
+ *
+ *   Row 1 (optional title):  | Total Deposits in Millions (In Millions Birr) |
+ *   Row 2 (headers):         | Name of Bank | 2019/20 | 2020/21 | 2021/22 | ...
+ *   Row 3+ (data):           | CBE          | 560178.43 | 735296.27 | ...
+ *                            | Awash        | 70577.90  | 102300.00 | ...
+ *
+ * i.e. one row per entity (a bank, in the CBE case), one column per
+ * period, with an optional single-cell title row above the real header
+ * row. A naive parse mistakes that title row for the header — since it
+ * has far fewer filled cells than the sheet is wide, every other column
+ * ends up named a meaningless "__EMPTY", "__EMPTY_1", "__EMPTY_2", ...
+ * instead of the real period labels underneath it.
+ *
+ * When detected, this unpivots into the exact same tidy long-format
+ * shape reshapePanelSheet (above) produces — { Category, Section,
+ * Metric, Value, Period } — so it feeds directly into the same
+ * downstream pipeline (isPanelSchema, the CBE-vs-Industry comparison
+ * dashboard, CBE-always-first-and-purple coloring, filters, everything)
+ * rather than needing a second parallel code path. The entity column
+ * (bank name) becomes Category; the sheet's title (or its header row's
+ * first cell, if there's no separate title) becomes both Section and
+ * Metric, since a single wide table like this only ever describes one
+ * metric; each period column becomes one Period value per row.
+ */
+export interface WideReshapeResult {
+  matched: boolean;
+  rows: DataRow[];
+  meta: { entityLabel: string | null; periods: string[]; metric: string | null };
+}
+
+/** Need at least this many period columns for a "row per entity, column
+ * per period" read to be worth trusting over a plain small table. */
+const MIN_PERIOD_COLUMNS = 2;
+/** Need at least this many entity rows for the same reason. */
+const MIN_ENTITY_ROWS = 2;
+
+/** True if a header cell reads like a time period rather than an
+ * arbitrary metric name — years ("2020"), fiscal years ("2019/20",
+ * "2019-2020"), quarters ("Q1 2020", "2020 Q1"), or months ("Jan 2020",
+ * "2020-01"). This is what stops an ordinary multi-column table (e.g.
+ * "Country | Population | GDP | Year") from being misread as a
+ * wide-by-period grid just because it happens to have several numeric
+ * columns after the first one — real period columns share this
+ * recognizable shape, arbitrary metric names don't. */
+function looksLikePeriodLabel(s: string): boolean {
+  const t = s.trim();
+  return (
+    /^(FY)?\d{4}([\/\-]\d{2,4})?$/i.test(t) ||
+    /^Q[1-4][\s\-\/]?\d{2,4}$/i.test(t) ||
+    /^\d{4}[\s\-\/]?Q[1-4]$/i.test(t) ||
+    /^(19|20)\d{2}[\-\/](0[1-9]|1[0-2])$/.test(t) ||
+    /^(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s*\d{2,4}$/i.test(t)
+  );
+}
+
+export function reshapeWideEntityByPeriod(aoa: any[][]): WideReshapeResult {
+  const empty: WideReshapeResult = { matched: false, rows: [], meta: { entityLabel: null, periods: [], metric: null } };
+  if (!aoa || aoa.length < 1 + MIN_ENTITY_ROWS) return empty;
+
+  const nonBlankCount = (row: any[] | undefined) => (row ?? []).filter((v) => !isBlank(v)).length;
+
+  // A leading title row has just one or two filled cells (usually a
+  // single merged cell), while the real header row underneath it is
+  // filled across most of the sheet's width. If row 0 doesn't look like
+  // a real header but row 1 does, row 0 is a title to note and skip,
+  // not a row of column names or data.
+  let headerRowIdx = 0;
+  let title: string | null = null;
+  const row0Count = nonBlankCount(aoa[0]);
+  const row1Count = nonBlankCount(aoa[1]);
+  if (row0Count > 0 && row0Count <= 2 && row1Count >= 3 && row1Count > row0Count) {
+    title = asTrimmedString(aoa[0].find((v: any) => !isBlank(v)));
+    headerRowIdx = 1;
+  }
+
+  const headerRow = aoa[headerRowIdx] ?? [];
+  const dataStart = headerRowIdx + 1;
+  if (aoa.length - dataStart < MIN_ENTITY_ROWS) return empty;
+
+  const width = headerRow.length;
+  if (width < 1 + MIN_PERIOD_COLUMNS) return empty;
+
+  const entityLabel = isBlank(headerRow[0]) ? null : asTrimmedString(headerRow[0]);
+  const periodCols: { col: number; period: string }[] = [];
+  for (let c = 1; c < width; c++) {
+    if (!isBlank(headerRow[c])) periodCols.push({ col: c, period: asTrimmedString(headerRow[c]) });
+  }
+  if (periodCols.length < MIN_PERIOD_COLUMNS) return empty;
+
+  // Require most of the would-be period columns to actually look like
+  // time periods — see looksLikePeriodLabel above for why.
+  const periodLikeCount = periodCols.filter((p) => looksLikePeriodLabel(p.period)).length;
+  if (periodLikeCount / periodCols.length < 0.7) return empty;
+
+  const dataRows = (aoa.slice(dataStart) ?? []).filter((row) => row && !row.every((v) => isBlank(v)));
+  if (dataRows.length < MIN_ENTITY_ROWS) return empty;
+
+  const metric = title ?? entityLabel ?? "Value";
+  const tidyRows: DataRow[] = [];
+  let numericHits = 0;
+
+  for (const row of dataRows) {
+    const entity = row[0];
+    if (isBlank(entity)) continue;
+    for (const { col, period } of periodCols) {
+      const raw = row[col];
+      if (isBlank(raw)) continue;
+      const num = typeof raw === "number" ? raw : Number(String(raw).replace(/,/g, ""));
+      if (!Number.isFinite(num)) continue;
+      numericHits++;
+      tidyRows.push({ Category: asTrimmedString(entity), Section: metric, Metric: metric, Value: num, Period: period });
+    }
+  }
+
+  // Require most of the entity×period grid to actually be numeric —
+  // otherwise this is probably just an ordinary table with several text
+  // columns that happens to be wide, not a real period grid.
+  if (numericHits < dataRows.length * periodCols.length * 0.5) return empty;
+  if (!tidyRows.length) return empty;
+
+  return { matched: true, rows: tidyRows, meta: { entityLabel, periods: periodCols.map((p) => p.period), metric } };
+}
