@@ -33,21 +33,58 @@ export const CBE_BRAND_PURPLE = "#5b2a83";
 export function isCbeLabel(label: string): boolean {
   return /cbe/i.test(label);
 }
-// Colors for everything that ISN'T CBE — deliberately contains no
-// purple (reserved exclusively for CBE) and no black/gray/white tones
-// either: a muted charcoal or slate reads as "disabled" or fades away
-// entirely on a dark background, and washes out on a plain white one,
-// so every non-CBE entity gets its own genuinely distinct, vivid color
-// instead. Leads with gold (CBE's own accent color) so the common
-// two-way "CBE vs Industry" comparison reads as a clean purple-vs-gold
-// pair; a third, fourth, etc. non-CBE category (e.g. other competitor
-// banks) each get their own bright, clearly different hue rather than
-// repeating gold or fading into a dull neutral.
+
+// Real (or best-known-public) brand colors for major Ethiopian banks —
+// checked against each bank's own public branding rather than assigned
+// arbitrarily, so "Awash" reliably means the same orange every time it
+// appears, "Abyssinia" the same yellow, and so on, instead of whichever
+// color a generic cycling palette happened to land on for that chart.
+// Matched by a case-insensitive substring against the category label,
+// so "Awash", "Awash Bank", and "Awash International Bank" all resolve
+// to the same entry. Only banks with a well-established, confidently-
+// known public color are listed here; anything not recognized falls
+// through to NON_CBE_COLORS below, which still guarantees it gets its
+// own distinct, never-repeated color — just not a bank-specific one.
+const BANK_BRAND_COLORS: [pattern: RegExp, color: string][] = [
+  [/awash/i, "#F26522"],       // Awash Bank — orange
+  [/abyssinia/i, "#FFC72C"],   // Bank of Abyssinia — yellow/gold
+  [/dashen/i, "#C8102E"],      // Dashen Bank — red
+  [/wegagen/i, "#0057A6"],     // Wegagen Bank — blue
+  [/hibret|\bunited bank\b/i, "#00A19A"], // Hibret (formerly United) Bank — teal
+  [/cooperative bank of oromia|\bcoop\b/i, "#2E7D32"], // Cooperative Bank of Oromia — green
+  [/\boromia\b/i, "#F9A825"],  // Oromia International Bank (or plain "Oromia") — amber/gold
+  [/zemen/i, "#1B2A4A"],       // Zemen Bank — navy
+  [/nib international|\bnib\b/i, "#8B5E3C"], // NIB International Bank — brown
+  [/lion/i, "#B8860B"],        // Lion International Bank — bronze/dark gold
+  [/berhan/i, "#0072BC"],      // Berhan Bank — sky blue
+  [/bunna/i, "#6F4E37"],       // Bunna Bank — coffee brown
+  [/abay/i, "#004C97"],        // Abay Bank — blue
+  [/enat/i, "#EC407A"],        // Enat Bank — pink
+];
+
+function bankBrandColor(label: string): string | null {
+  for (const [pattern, color] of BANK_BRAND_COLORS) {
+    if (pattern.test(label)) return color;
+  }
+  return null;
+}
+
+// Colors for everything that ISN'T CBE and isn't one of the named banks
+// above — deliberately contains no purple (reserved exclusively for
+// CBE) and no black/gray/white tones either: a muted charcoal or slate
+// reads as "disabled" or fades away entirely on a dark background, and
+// washes out on a plain white one, so every unrecognized entity still
+// gets its own genuinely distinct, vivid color instead. Leads with gold
+// (CBE's own accent color) so a plain two-way "CBE vs Industry"
+// comparison (no other named bank involved) reads as a clean
+// purple-vs-gold pair.
 const NON_CBE_COLORS = ["#f2a900", "#0ea5a4", "#e11d48", "#6366f1", "#db2777", "#059669", "#f97316", "#0284c7"];
 
 /** Assigns every name in `names` a color: anything matching "CBE" always
- * gets the brand purple; everything else gets the next unused color
- * from NON_CBE_COLORS, in order of first appearance.
+ * gets the brand purple; anything matching a known Ethiopian bank
+ * (BANK_BRAND_COLORS above) gets that bank's real color; everything
+ * else gets the next unused color from NON_CBE_COLORS, in order of
+ * first appearance.
  *
  * This exists because naively indexing a shared palette by array
  * position (`PALETTE[i % n]`) breaks the moment CBE isn't literally the
@@ -55,18 +92,41 @@ const NON_CBE_COLORS = ["#f2a900", "#0ea5a4", "#e11d48", "#6366f1", "#db2777", "
  * coincidentally get the same purple that's supposed to be CBE-only,
  * so both series render purple. Assigning colors by category identity
  * instead of array position guarantees CBE is always uniquely purple
- * and nothing else ever is, regardless of sort order. */
+ * and nothing else ever is, regardless of sort order — and lets a named
+ * bank keep the same recognizable color across every chart it appears
+ * in, rather than a random one that shifts with sort order or which
+ * other banks happen to be on the same chart. */
 export function assignSeriesColors(names: string[]): Record<string, string> {
   const map: Record<string, string> = {};
+  const usedFallback = new Set<string>();
   let nonCbeIdx = 0;
   for (const name of names) {
     if (name in map) continue;
     if (isCbeLabel(name)) {
       map[name] = CBE_BRAND_PURPLE;
-    } else {
-      map[name] = NON_CBE_COLORS[nonCbeIdx % NON_CBE_COLORS.length];
-      nonCbeIdx++;
+      continue;
     }
+    const brandColor = bankBrandColor(name);
+    if (brandColor) {
+      map[name] = brandColor;
+      continue;
+    }
+    // Skip any fallback color already claimed by a named bank above, so
+    // e.g. an unrecognized entity never happens to land on the exact
+    // same gold as Oromia International just by cycling order. Bounded
+    // to the palette's own length so this can never spin forever if
+    // every fallback color is already claimed (falls back to allowing a
+    // repeat at that point, which only happens with 9+ unrecognized
+    // entities on one chart — an edge case, not the common path).
+    let attempts = 0;
+    while (usedFallback.has(NON_CBE_COLORS[nonCbeIdx % NON_CBE_COLORS.length]) && attempts < NON_CBE_COLORS.length) {
+      nonCbeIdx++;
+      attempts++;
+    }
+    const color = NON_CBE_COLORS[nonCbeIdx % NON_CBE_COLORS.length];
+    map[name] = color;
+    usedFallback.add(color);
+    nonCbeIdx++;
   }
   return map;
 }
