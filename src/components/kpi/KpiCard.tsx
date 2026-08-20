@@ -28,7 +28,30 @@ function aggregate(rows: DataRow[], field: string, agg: string): number {
   }
 }
 
-export function formatNumber(n: number): string {
+/** Detects a unit already declared in the metric's own name — e.g.
+ * "Total Deposits in Millions" or "(In Millions Birr)" — so a value
+ * that's already expressed in millions doesn't ALSO get a "M" suffix
+ * computed from its raw magnitude on top of that. Stacking both would
+ * silently read as 1,000,000× smaller than the real figure (e.g. a
+ * deposits figure of 1,175,455.6 — already millions of Birr, i.e.
+ * ~1.18 trillion Birr — naively abbreviating by raw size would show
+ * "1.2M", which reads as 1.2 million of *something*, not 1.18 trillion
+ * Birr): once the label says the unit, trust that instead of guessing
+ * again from the number itself. */
+function detectDeclaredUnit(label: string): string | null {
+  const t = label.toLowerCase();
+  if (/\bbillion/.test(t)) return "B";
+  if (/\bmillion/.test(t)) return "M";
+  if (/\bthousand/.test(t)) return "K";
+  return null;
+}
+
+export function formatNumber(n: number, unitLabel?: string): string {
+  const declaredUnit = unitLabel ? detectDeclaredUnit(unitLabel) : null;
+  if (declaredUnit) {
+    return `${n.toLocaleString(undefined, { maximumFractionDigits: 1 })}${declaredUnit}`;
+  }
+  if (Math.abs(n) >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(1)}B`;
   if (Math.abs(n) >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (Math.abs(n) >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
   return n.toLocaleString(undefined, { maximumFractionDigits: 2 });
@@ -60,7 +83,7 @@ export function computeKpiValue(widget: Widget, rows: DataRow[]): { value: numbe
   const first = aggregate(scoped.slice(0, mid), field, agg);
   const second = aggregate(scoped.slice(mid), field, agg);
   const delta = first === 0 ? 0 : ((second - first) / Math.abs(first)) * 100;
-  return { value: total, deltaPct: delta, formattedValue: formatNumber(total) };
+  return { value: total, deltaPct: delta, formattedValue: formatNumber(total, widget.title) };
 }
 
 export default function KpiCard({ widget, rows }: KpiCardProps) {
