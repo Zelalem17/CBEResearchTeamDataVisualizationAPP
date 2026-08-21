@@ -106,4 +106,4 @@ export default function KpiCard({ widget, rows }: KpiCardProps) {
       </div>
     </div>
   );
-}
+} 
