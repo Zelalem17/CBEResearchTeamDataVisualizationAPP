@@ -1244,5 +1244,5 @@ export function buildOptionForWidget(widget: Widget, rows: DataRow[]): any {
     case "streamgraph": return buildStreamgraphOption(rows, widget.config);
     case "radar": return buildRadarOption(rows, widget.config);
     default: return {};
-  }
+  } 
 }
