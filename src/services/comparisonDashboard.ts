@@ -135,6 +135,16 @@ export function generatePanelComparisonWidgets(rows: DataRow[], kind?: PanelChar
     return pos;
   };
 
+  // A wide-format single-metric upload (e.g. one sheet titled "Total
+  // Deposits...", reshaped by panelReshape.ts's
+  // reshapeWideEntityByPeriod) has exactly one Section and one Metric,
+  // both set to that same title — so titling every widget
+  // "X — X" or "X (X) — Y" would just repeat itself. Collapse that
+  // down to the single name wherever Section and Metric happen to be
+  // identical, and only join them with a separator when they're
+  // genuinely two different things (the multi-section ATM/POS/... case).
+  const sectionMetricLabel = (section: string, metric: string) => (section === metric ? section : `${section} — ${metric}`);
+
   // 1. One comparison chart per (Section, Metric), all in the currently
   // selected kind — every section shown, never collapsed to just one.
   for (const section of sections) {
@@ -151,7 +161,7 @@ export function generatePanelComparisonWidgets(rows: DataRow[], kind?: PanelChar
       const is3D = spec.type === "bar3d" || spec.type === "pie3d";
       const isWave = spec.type === "wave";
       const width = isDetailed || is3D ? 8 : isWave ? 4 : 4;
-      widgets.push({ type: spec.type, title: `${section} — ${metric}`, config: spec.config, position: place(width, 5) });
+      widgets.push({ type: spec.type, title: sectionMetricLabel(section, metric), config: spec.config, position: place(width, 5) });
     }
   }
 
@@ -163,7 +173,7 @@ export function generatePanelComparisonWidgets(rows: DataRow[], kind?: PanelChar
     for (const category of categories) {
       widgets.push({
         type: "kpi",
-        title: `${section} (${firstMetric}) — ${category}`,
+        title: `${sectionMetricLabel(section, String(firstMetric))} — ${category}`,
         config: {
           field: "Value", agg: hasPeriod ? "latest" : "sum",
           filters: [{ field: "Section", value: section }, { field: "Metric", value: String(firstMetric) }, { field: "Category", value: category }],
@@ -182,7 +192,7 @@ export function generatePanelComparisonWidgets(rows: DataRow[], kind?: PanelChar
   });
 
   return packWidgets(widgets, rows);
-} 
+}
 
 /** Re-renders every comparison chart widget (identified by
  * `config.comparisonKey`, set by buildComparisonWidgetSpec above) as the
