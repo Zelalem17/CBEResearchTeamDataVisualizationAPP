@@ -131,6 +131,45 @@ export function assignSeriesColors(names: string[]): Record<string, string> {
   return map;
 }
 
+// Set once, synchronously, immediately before building a single chart's
+// option/size/list — see setPreferredCategoryOrder below. Safe as
+// module-level mutable state specifically because JS is single-threaded
+// and every call site sets-then-immediately-uses it within one
+// synchronous function call, with no async gap another chart's build
+// could interleave into.
+let preferredCategoryOrder: string[] | null = null;
+
+/** Lets a researcher override the default CBE-first category ordering
+ * with their own preferred order (e.g. "Industry" before "CBE") via the
+ * drag-and-drop reorder control — applied to every chart at once, since
+ * they all funnel through the same groupAndAgg/sortCbeFirst comparator.
+ * Pass null/undefined/[] to go back to the default CBE-first behavior.
+ * Called internally by buildOptionForWidget, getWidgetListData, and
+ * computeAutoFitSize — not meant to be called from anywhere else. */
+export function setPreferredCategoryOrder(order: string[] | null | undefined) {
+  preferredCategoryOrder = order && order.length ? order : null;
+}
+
+/** Primary sort key shared by groupAndAgg and sortCbeFirst: the
+ * researcher's own custom order if one is set (unlisted names sort
+ * after every listed one, keeping their relative order); otherwise CBE
+ * always first. Returns 0 (a tie) when neither rule distinguishes two
+ * names, leaving it to the caller's own secondary sort (e.g. by value). */
+function compareByPreferredOrThenCbe(a: string, b: string): number {
+  if (preferredCategoryOrder) {
+    const order = preferredCategoryOrder;
+    const ai = order.findIndex((n) => n.toLowerCase() === a.toLowerCase());
+    const bi = order.findIndex((n) => n.toLowerCase() === b.toLowerCase());
+    const aRank = ai === -1 ? order.length : ai;
+    const bRank = bi === -1 ? order.length : bi;
+    return aRank - bRank;
+  }
+  const aCbe = isCbeLabel(a);
+  const bCbe = isCbeLabel(b);
+  if (aCbe !== bCbe) return aCbe ? -1 : 1;
+  return 0;
+}
+
 export function groupAndAgg(rows: DataRow[], groupField: string, valueField?: string, agg: string = "sum") {
   const groups = new Map<string, number[]>();
   for (const row of rows) {
@@ -150,30 +189,27 @@ export function groupAndAgg(rows: DataRow[], groupField: string, valueField?: st
     }
     return { key, value: Math.round(value * 100) / 100 };
   });
-  // CBE always comes first — this is CBE's own app, so wherever CBE
-  // appears alongside a comparison category (Industry, a competitor,
-  // etc.) it leads every bar/pie/list/legend rather than being sorted
-  // in purely by value. Everything else still sorts by value descending.
+  // CBE always comes first by default — this is CBE's own app, so
+  // wherever CBE appears alongside a comparison category (Industry, a
+  // competitor, etc.) it leads every bar/pie/list/legend rather than
+  // being sorted in purely by value — unless the researcher has set
+  // their own preferred order (see setPreferredCategoryOrder above), in
+  // which case that's honored instead. Everything else still sorts by
+  // value descending.
   return entries.sort((a, b) => {
-    const aCbe = isCbeLabel(a.key);
-    const bCbe = isCbeLabel(b.key);
-    if (aCbe !== bCbe) return aCbe ? -1 : 1;
+    const primary = compareByPreferredOrThenCbe(a.key, b.key);
+    if (primary !== 0) return primary;
     return b.value - a.value;
   });
 }
 
-/** Sorts a list of series/category names so CBE always leads, otherwise
- * preserving relative order — the series-array equivalent of
- * groupAndAgg's CBE-first sort, for chart builders that derive their
- * category list from a plain Set rather than groupAndAgg (grouped bar,
- * grouped line, category scatter, 3D bar). */
+/** Sorts a list of series/category names by the same rule (see
+ * compareByPreferredOrThenCbe above) — the series-array equivalent of
+ * groupAndAgg's ordering, for chart builders that derive their category
+ * list from a plain Set rather than groupAndAgg (grouped bar, grouped
+ * line, category scatter, 3D bar). */
 function sortCbeFirst(names: string[]): string[] {
-  return [...names].sort((a, b) => {
-    const aCbe = isCbeLabel(a);
-    const bCbe = isCbeLabel(b);
-    if (aCbe !== bCbe) return aCbe ? -1 : 1;
-    return 0;
-  });
+  return [...names].sort(compareByPreferredOrThenCbe);
 }
 
 /** Lightens a hex color toward white by `amount` (0–1) — used to build
@@ -947,7 +983,8 @@ export interface WidgetListRow {
  * grouped/aggregated rows the chart itself renders (same field mapping,
  * same top-N cap), each annotated with its share of the total so the
  * list's percentages always match what the chart shows. */
-export function getWidgetListData(widget: Widget, rows: DataRow[]): WidgetListRow[] {
+export function getWidgetListData(widget: Widget, rows: DataRow[], categoryOrder?: string[]): WidgetListRow[] {
+  setPreferredCategoryOrder(categoryOrder);
   const config = widget.config ?? {};
   const scoped = applyConfigFilters(rows, config);
   const isPie = widget.type === "pie_detailed";
@@ -968,7 +1005,8 @@ export function getWidgetListData(widget: Widget, rows: DataRow[]): WidgetListRo
  * tile — the person never has to find the resize handle and drag it out
  * by hand just to see the whole graph. Returns null for widget types
  * that don't need a data-driven minimum (kpi, table, gauge, ...). */
-export function computeAutoFitSize(widget: Widget, rows: DataRow[]): { w: number; h: number } | null {
+export function computeAutoFitSize(widget: Widget, rows: DataRow[], categoryOrder?: string[]): { w: number; h: number } | null {
+  setPreferredCategoryOrder(categoryOrder);
   const config = widget.config ?? {};
   const scoped = applyConfigFilters(rows, config);
 
@@ -1211,7 +1249,8 @@ export function buildRadarOption(rows: DataRow[], config: any) {
   };
 }
 
-export function buildOptionForWidget(widget: Widget, rows: DataRow[]): any {
+export function buildOptionForWidget(widget: Widget, rows: DataRow[], categoryOrder?: string[]): any {
+  setPreferredCategoryOrder(categoryOrder);
   switch (widget.type) {
     case "bar": return buildBarOption(rows, widget.config);
     // "Detailed" variants reuse the exact same chart option as their
@@ -1244,5 +1283,5 @@ export function buildOptionForWidget(widget: Widget, rows: DataRow[]): any {
     case "streamgraph": return buildStreamgraphOption(rows, widget.config);
     case "radar": return buildRadarOption(rows, widget.config);
     default: return {};
-  } 
+  }
 }
