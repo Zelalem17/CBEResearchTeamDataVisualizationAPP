@@ -2,16 +2,17 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import GridLayout, { Layout, WidthProvider } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
-import { Plus, FileSpreadsheet, FileImage, FileText, LayoutGrid } from "lucide-react";
+import { Plus, FileSpreadsheet, FileImage, FileText, LayoutGrid, ArrowUpDown } from "lucide-react";
 import type { DataRow, FilterRule, Widget, WidgetType } from "@/types";
 import WidgetCard from "./WidgetCard";
 import WidgetLibraryModal from "./WidgetLibraryModal";
 import ReportPanel from "./ReportPanel";
+import CategoryOrderModal from "./CategoryOrderModal";
 import { applyFilters } from "@/utils/filterUtils";
 import { exportDashboardToPdf, exportDashboardToWord, exportRowsToExcel } from "@/utils/exportUtils";
-import { computeAutoFitSize } from "@/components/charts/chartConfigBuilders";
+import { computeAutoFitSize, isCbeLabel } from "@/components/charts/chartConfigBuilders";
 import { remapWidgetConfig } from "@/services/chartTypeSwitch";
-import { packWidgets } from "@/services/layoutPacking";
+import { packWidgets, shelfPack } from "@/services/layoutPacking";
 
 interface DashboardGridProps {
   widgets: Widget[];
@@ -22,6 +23,11 @@ interface DashboardGridProps {
   datasetName: string;
   onWidgetsChange: (widgets: Widget[]) => void;
   onDrillDown: (field: string, value: string) => void;
+  /** Researcher's saved category display order (see CategoryOrderModal) —
+   * applied to every chart's series/bar/legend/list order at once.
+   * Empty/undefined falls back to the default CBE-first ordering. */
+  categoryOrder?: string[];
+  onCategoryOrderChange?: (order: string[]) => void;
   /** false for viewer-role sessions: hides "Add widget", disables
    * drag/resize, and hides the per-widget remove control. Export
    * buttons stay available either way (read-only export is fine). */
@@ -38,9 +44,11 @@ const ResponsiveGridLayout = WidthProvider(GridLayout);
  * onWidgetsChange -> caller (DashboardPage) -> PUT /dashboards/{id}/layout.
  */
 export default function DashboardGrid({
-  widgets, rows, filters, searchTerm, columns, datasetName, onWidgetsChange, onDrillDown, editable = true,
+  widgets, rows, filters, searchTerm, columns, datasetName, onWidgetsChange, onDrillDown,
+  categoryOrder, onCategoryOrderChange, editable = true,
 }: DashboardGridProps) {
   const [showLibrary, setShowLibrary] = useState(false);
+  const [showCategoryOrder, setShowCategoryOrder] = useState(false);
   const [exportingWord, setExportingWord] = useState(false);
   const [exportingPdf, setExportingPdf] = useState(false);
   const gridRef = useRef<HTMLDivElement>(null);
@@ -50,6 +58,27 @@ export default function DashboardGrid({
   // else (actual charts + data tables) stays in the draggable grid.
   const kpiWidgets = useMemo(() => widgets.filter((w) => w.type === "kpi"), [widgets]);
   const gridWidgets = useMemo(() => widgets.filter((w) => w.type !== "kpi"), [widgets]);
+
+  // Every distinct "Category" value across the dataset (CBE, Industry,
+  // named banks, ...) — the reorder modal's draggable list, and the
+  // universe of names a saved categoryOrder can refer to. Only
+  // meaningful for panel/comparison-style data that actually has a
+  // Category column; ordinary datasets just won't show the button.
+  const distinctCategories = useMemo(() => {
+    const values = new Set<string>();
+    for (const row of rows) {
+      const v = row["Category"];
+      if (v !== null && v !== undefined && v !== "") values.add(String(v));
+    }
+    // Default order before any manual reorder — CBE first, same rule
+    // every chart already falls back to on its own.
+    return Array.from(values).sort((a, b) => {
+      const aCbe = isCbeLabel(a);
+      const bCbe = isCbeLabel(b);
+      if (aCbe !== bCbe) return aCbe ? -1 : 1;
+      return 0;
+    });
+  }, [rows]);
 
   // Memoized: without this, filteredRows was a brand-new array on every
   // single render (typing in search, dragging one widget, toggling one
@@ -84,7 +113,7 @@ export default function DashboardGrid({
         // Bumps the rendered size up to that floor and stops the grid's
         // resize handle from dragging back below it; never shrinks a size
         // the person (or a saved layout) already set larger than needed.
-        const fit = computeAutoFitSize(w, filteredRows);
+        const fit = computeAutoFitSize(w, filteredRows, categoryOrder);
         const minW = Math.max(2, fit?.w ?? 2);
         const minH = Math.max(2, fit?.h ?? 2);
         return {
@@ -97,7 +126,7 @@ export default function DashboardGrid({
           minH,
         };
       }),
-    [gridWidgets, filteredRows]
+    [gridWidgets, filteredRows, categoryOrder]
   );
 
   const handleLayoutChange = useCallback(
@@ -113,28 +142,53 @@ export default function DashboardGrid({
   );
 
   // KPI widgets live in the fixed Report panel now, not the draggable
-  // grid — so they're excluded before packing (which sorts + shelf-packs
-  // for grid x/y) and added back untouched, rather than having their
+  // grid — so they're excluded before packing (which shelf-packs for
+  // grid x/y) and added back untouched, rather than having their
   // "position" consume phantom grid space that would leave a gap next
   // to whatever chart got packed after them.
-  const repackGridWidgets = (all: Widget[]) => {
+  //
+  // Deliberately shelfPack (positions only, no re-sort) rather than
+  // packWidgets (sorts by type first) — add/remove/reorder are routine
+  // editing, not "start over," so they preserve whatever order the
+  // researcher has already arranged (via drag, or "move to position");
+  // only the explicit Auto-arrange button below re-sorts by type.
+  const repositionGridWidgets = (all: Widget[]) => {
     const kpis = all.filter((w) => w.type === "kpi");
     const rest = all.filter((w) => w.type !== "kpi");
-    return [...kpis, ...packWidgets(rest, filteredRows)];
+    return [...kpis, ...shelfPack(rest, filteredRows)];
   };
 
   const handleAddWidget = (widget: Omit<Widget, "id">) => {
     const withNew = [...widgets, { ...widget, id: crypto.randomUUID() }];
     // Re-pack the whole board rather than always starting a new full row:
     // the new widget slots in next to an existing one when it fits the
-    // remaining row width, and everything stays sorted by type.
-    onWidgetsChange(repackGridWidgets(withNew));
+    // remaining row width, appended after everything else already there.
+    onWidgetsChange(repositionGridWidgets(withNew));
   };
 
   const handleRemoveWidget = (id: string) =>
-    onWidgetsChange(repackGridWidgets(widgets.filter((w) => w.id !== id)));
+    onWidgetsChange(repositionGridWidgets(widgets.filter((w) => w.id !== id)));
 
-  const handleAutoArrange = () => onWidgetsChange(repackGridWidgets(widgets));
+  const handleAutoArrange = () => onWidgetsChange(packWidgets(widgets, filteredRows));
+
+  /** Moves one chart widget to an arbitrary 1-based position among the
+   * *chart* widgets (KPIs aren't part of this ordering — they live in
+   * the Report panel) — e.g. "put the CBE chart 3rd" — then re-packs
+   * x/y from that new order. This is the explicit alternative to
+   * dragging when the researcher wants a specific, exact position
+   * rather than eyeballing a drop target. */
+  const handleMoveWidget = (id: string, targetPosition: number) => {
+    const kpis = widgets.filter((w) => w.type === "kpi");
+    const rest = widgets.filter((w) => w.type !== "kpi");
+    const fromIdx = rest.findIndex((w) => w.id === id);
+    if (fromIdx === -1) return;
+    const clampedTarget = Math.max(1, Math.min(rest.length, Math.round(targetPosition))) - 1;
+    if (clampedTarget === fromIdx) return;
+    const reordered = [...rest];
+    const [moved] = reordered.splice(fromIdx, 1);
+    reordered.splice(clampedTarget, 0, moved);
+    onWidgetsChange([...kpis, ...shelfPack(reordered, filteredRows)]);
+  };
 
   const handleToggleLabels = (id: string) =>
     onWidgetsChange(
@@ -226,6 +280,15 @@ export default function DashboardGrid({
               <LayoutGrid size={15} /> Auto-arrange
             </button>
           )}
+          {editable && onCategoryOrderChange && distinctCategories.length > 1 && (
+            <button
+              onClick={() => setShowCategoryOrder(true)}
+              title="Choose which category (e.g. CBE or Industry) comes first on every chart"
+              className="btn-secondary flex items-center gap-1.5 text-sm"
+            >
+              <ArrowUpDown size={15} /> Category order
+            </button>
+          )}
           <button onClick={handleExportExcel} className="btn-secondary flex items-center gap-1.5 text-sm">
             <FileSpreadsheet size={15} /> Excel
           </button>
@@ -239,7 +302,7 @@ export default function DashboardGrid({
       </div>
 
       <div ref={gridRef}>
-        <ReportPanel kpiWidgets={kpiWidgets} rows={filteredRows} onRemove={editable ? handleRemoveWidget : undefined} />
+        <ReportPanel kpiWidgets={kpiWidgets} rows={filteredRows} categoryOrder={categoryOrder} onRemove={editable ? handleRemoveWidget : undefined} />
 
         <div className="mt-4">
           <ResponsiveGridLayout
@@ -266,6 +329,7 @@ export default function DashboardGrid({
                 <WidgetCard
                   widget={widget}
                   rows={filteredRows}
+                  categoryOrder={categoryOrder}
                   onRemove={editable ? () => handleRemoveWidget(widget.id) : undefined}
                   onDrillDown={onDrillDown}
                   onToggleLabels={editable ? () => handleToggleLabels(widget.id) : undefined}
@@ -282,6 +346,14 @@ export default function DashboardGrid({
 
       {showLibrary && (
         <WidgetLibraryModal columns={columns} onAdd={handleAddWidget} onClose={() => setShowLibrary(false)} />
+      )}
+
+      {showCategoryOrder && onCategoryOrderChange && (
+        <CategoryOrderModal
+          categories={categoryOrder && categoryOrder.length ? categoryOrder : distinctCategories}
+          onSave={onCategoryOrderChange}
+          onClose={() => setShowCategoryOrder(false)}
+        />
       )}
     </div>
   );
