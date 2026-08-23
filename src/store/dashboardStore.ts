@@ -147,6 +147,6 @@ export const useDashboardStore = create<DashboardState>()(
           Object.entries(state.tabs).map(([id, tab]) => [id, { ...tab, rows: tab.rows.slice(0, 2000) }])
         ),
       }) as unknown as DashboardState,
-    }
+    } 
   )
 );
