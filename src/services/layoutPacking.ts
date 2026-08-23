@@ -65,5 +65,50 @@ export function packWidgets<T extends Widget | Omit<Widget, "id">>(widgets: T[],
     x += width;
     rowHeight = Math.max(rowHeight, height);
     return placed;
+    
   });
+  export function shelfPack<T extends Widget | Omit<Widget, "id">>(
+  widgets: T[],
+  rows: DataRow[] = []
+): T[] {
+  let x = 0;
+  let y = 0;
+  let rowHeight = 0;
+
+  return widgets.map((w) => {
+    const fit = computeAutoFitSize(w as Widget, rows);
+
+    const width = Math.min(
+      GRID_COLS,
+      Math.max(w.position.w, fit?.w ?? w.position.w)
+    );
+
+    const height = Math.max(
+      w.position.h,
+      fit?.h ?? w.position.h
+    );
+
+    // Move to the next row when the widget doesn't fit.
+    if (x > 0 && x + width > GRID_COLS) {
+      x = 0;
+      y += rowHeight;
+      rowHeight = 0;
+    }
+
+    const placed = {
+      ...w,
+      position: {
+        x,
+        y,
+        w: width,
+        h: height,
+      },
+    };
+
+    x += width;
+    rowHeight = Math.max(rowHeight, height);
+
+    return placed;
+  });
+}
 }
