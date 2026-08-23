@@ -197,5 +197,5 @@ export default function WidgetCard({
         document.body
       )}
     </div>
-  );
+  ); 
 }
