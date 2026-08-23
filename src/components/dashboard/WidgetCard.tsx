@@ -14,6 +14,9 @@ import { SWITCHABLE_CHART_TYPES, isSwitchableChartType } from "@/services/chartT
 interface WidgetCardProps {
   widget: Widget;
   rows: DataRow[];
+  /** Researcher's saved category display order — passed straight
+   * through to ChartRenderer/the chart builders. */
+  categoryOrder?: string[];
   /** Omit to hide the remove control (viewer-role / read-only sessions). */
   onRemove?: () => void;
   onDrillDown?: (field: string, value: string) => void;
@@ -45,17 +48,17 @@ const SYMBOL_LABELS: Record<string, string> = { circle: "Circle", diamond: "Diam
 const BAR_STYLE_LABELS: Record<string, string> = { rounded: "Rounded", flat: "Flat", gradient: "Gradient" };
 const PIE_STYLE_LABELS: Record<string, string> = { donut: "Donut", solid: "Solid", rose: "Rose (Nightingale)" };
 
-function WidgetBody({ widget, rows, onDrillDown }: Pick<WidgetCardProps, "widget" | "rows" | "onDrillDown">) {
+function WidgetBody({ widget, rows, categoryOrder, onDrillDown }: Pick<WidgetCardProps, "widget" | "rows" | "categoryOrder" | "onDrillDown">) {
   if (widget.type === "kpi") return <KpiCard widget={widget} rows={rows} />;
   if (widget.type === "table") return <DataTable widget={widget} rows={rows} />;
-  return <ChartRenderer widget={widget} rows={rows} onDrillDown={onDrillDown} />;
+  return <ChartRenderer widget={widget} rows={rows} categoryOrder={categoryOrder} onDrillDown={onDrillDown} />;
 }
 
 /** The chrome around every widget: title bar with drag handle, remove
  * button, per-widget PNG export, chart-style toggles, expand-to-fullscreen,
  * and the widget's own visualization. */
 export default function WidgetCard({
-  widget, rows, onRemove, onDrillDown, onToggleLabels, onCycleSymbol, onCycleBarStyle, onCyclePieStyle, onChangeType,
+  widget, rows, categoryOrder, onRemove, onDrillDown, onToggleLabels, onCycleSymbol, onCycleBarStyle, onCyclePieStyle, onChangeType,
 }: WidgetCardProps) {
   const nodeRef = useRef<HTMLDivElement>(null);
   const [expanded, setExpanded] = useState(false);
@@ -158,7 +161,7 @@ export default function WidgetCard({
         </div>
       </div>
       <div className="flex-1 p-2 min-h-0">
-        <WidgetBody widget={widget} rows={rows} onDrillDown={onDrillDown} />
+        <WidgetBody widget={widget} rows={rows} categoryOrder={categoryOrder} onDrillDown={onDrillDown} />
       </div>
 
       {/* Fullscreen view: renders the same widget at (almost) full
@@ -187,7 +190,7 @@ export default function WidgetCard({
               </button>
             </div>
             <div className="flex-1 p-4 min-h-0">
-              <WidgetBody widget={widget} rows={rows} onDrillDown={onDrillDown} />
+              <WidgetBody widget={widget} rows={rows} categoryOrder={categoryOrder} onDrillDown={onDrillDown} />
             </div>
           </div>
         </div>,
