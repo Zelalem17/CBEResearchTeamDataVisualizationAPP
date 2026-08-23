@@ -7,6 +7,11 @@ import type { DataRow, Widget } from "@/types";
 interface ChartRendererProps {
   widget: Widget;
   rows: DataRow[];
+  /** Researcher's saved category display order (see
+   * CategoryOrderModal/DashboardGrid) — passed straight through to
+   * buildOptionForWidget/getWidgetListData. Empty/undefined falls back
+   * to the default CBE-first ordering. */
+  categoryOrder?: string[];
   /** Drill-down: called when the user clicks a category/bar/point. */
   onDrillDown?: (field: string, value: string) => void;
   /** Exposes the underlying chart component instance for PNG export. */
@@ -43,11 +48,11 @@ function ensureLiquidLoaded() {
   return liquidLoading;
 }
 
-export default function ChartRenderer({ widget, rows, onDrillDown, chartRef }: ChartRendererProps) {
+export default function ChartRenderer({ widget, rows, categoryOrder, onDrillDown, chartRef }: ChartRendererProps) {
   const isDetailed = DETAILED_TYPES.has(widget.type);
 
   const chart = (
-    <EchartsPanel widget={widget} rows={rows} onDrillDown={onDrillDown} chartRef={chartRef} />
+    <EchartsPanel widget={widget} rows={rows} categoryOrder={categoryOrder} onDrillDown={onDrillDown} chartRef={chartRef} />
   );
 
   if (!isDetailed) return chart;
@@ -56,7 +61,7 @@ export default function ChartRenderer({ widget, rows, onDrillDown, chartRef }: C
   // value + percentage list next to it (left or right, via
   // config.listPosition) so exact figures are always readable, not
   // just implied by bar height or slice angle.
-  const listData = getWidgetListData(widget, rows);
+  const listData = getWidgetListData(widget, rows, categoryOrder);
   const listPosition = widget.config?.listPosition === "left" ? "left" : "right";
   const list = <ValueList data={listData} />;
 
@@ -117,7 +122,7 @@ function ValueList({ data }: { data: { key: string; value: number; pct: number }
 /** The actual ECharts instance — split out so the "detailed" wrapper
  * above can lay it out next to the value list without duplicating the
  * option-building / event-wiring logic. */
-function EchartsPanel({ widget, rows, onDrillDown, chartRef }: ChartRendererProps) {
+function EchartsPanel({ widget, rows, categoryOrder, onDrillDown, chartRef }: ChartRendererProps) {
   const theme = useThemeStore((s) => s.theme);
   const localRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -177,7 +182,7 @@ function EchartsPanel({ widget, rows, onDrillDown, chartRef }: ChartRendererProp
     return () => observer.disconnect();
   }, [needsExtension, widget.id]);
 
-  const option: any = useMemo(() => buildOptionForWidget(widget, rows), [widget, rows]);
+  const option: any = useMemo(() => buildOptionForWidget(widget, rows, categoryOrder), [widget, rows, categoryOrder]);
 
   const onEvents = useMemo(
     () => ({
