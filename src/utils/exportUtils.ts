@@ -55,12 +55,17 @@ async function ensureFontsReady(): Promise<void> {
 async function captureCanvas(node: HTMLElement): Promise<HTMLCanvasElement> {
   await ensureFontsReady();
   return html2canvas(node, {
-    backgroundColor: getComputedStyle(document.body).backgroundColor || "#ffffff",
-    // 3x device-pixel density — the difference between "readable at a
-    // glance" and "blurry once placed into a Word/PDF page" for chart
-    // labels, axis numbers, and legends specifically, since those get
-    // shrunk down again once embedded in the document.
-    scale: 3,
+    // Transparent, not a solid page/body-colored fill — a widget card
+    // has rounded corners, and forcing a solid rectangle behind it used
+    // to leave a visible colored box in the corners of every downloaded
+    // PNG and every image placed into the Word/PDF exports (and, in
+    // dark mode, a dark box that looked flatly wrong once pasted onto a
+    // normal white page).
+    backgroundColor: null,
+    // 4x device-pixel density — high enough that chart labels, axis
+    // numbers, and legends stay crisp even after being placed into a
+    // Word/PDF page at a smaller display size.
+    scale: 4,
     useCORS: true,
     // Drag handles and per-widget toolbar buttons are on-screen UI
     // chrome, not part of the widget's actual content — hide anything
@@ -69,6 +74,26 @@ async function captureCanvas(node: HTMLElement): Promise<HTMLCanvasElement> {
     // treatment: they're already opacity-0 except on hover, and
     // html2canvas already respects that.
     ignoreElements: (el) => el.classList?.contains("capture-hide"),
+    // `backgroundColor: null` above only stops html2canvas from painting
+    // its *own* fallback fill behind the captured content — it doesn't
+    // touch the captured element's *own* CSS background (e.g. a widget
+    // card's `bg-white dark:bg-gray-900`), which still gets faithfully
+    // rendered as an opaque rectangle. html2canvas's `onclone` callback
+    // only ever receives the cloned *document* (not a direct reference
+    // to the cloned counterpart of `node`), so the clone of `node` is
+    // located inside it via its own `data-widget-capture` id — every
+    // node this function is ever called with carries one — and just
+    // that root background is stripped there, on the throwaway clone
+    // only (the real on-screen card is untouched). Deliberately only the
+    // root node — inner colored design (the Report panel's gradient
+    // header, gold accent bars, chart colors) is left exactly as-is.
+    onclone: (clonedDoc: Document) => {
+      const captureId = node.getAttribute("data-widget-capture");
+      const clonedNode = captureId
+        ? (clonedDoc.querySelector(`[data-widget-capture="${CSS.escape(captureId)}"]`) as HTMLElement | null)
+        : null;
+      if (clonedNode) clonedNode.style.backgroundColor = "transparent";
+    },
   });
 }
 
@@ -79,8 +104,9 @@ async function screenshotNode(node: HTMLElement): Promise<{ buffer: ArrayBuffer;
   return { buffer, ratio: canvas.width / canvas.height };
 }
 
-/** Export a single DOM node (a widget card, or the whole dashboard grid)
- * as a PNG image. */
+/** Export a single DOM node (typically a widget card, which carries a
+ * `data-widget-capture` id used above to make its background
+ * transparent in the export) as a PNG image. */
 export async function exportNodeToPng(node: HTMLElement, filename: string) {
   const canvas = await captureCanvas(node);
   const link = document.createElement("a");
@@ -164,7 +190,7 @@ function buildKpiSummaryTable(kpiWidgets: ExportableWidget[], rows: DataRow[]): 
     children: [tableHeaderCell("Metric"), tableHeaderCell("Value", AlignmentType.RIGHT), tableHeaderCell("Trend", AlignmentType.RIGHT)],
   });
   const bodyRows = kpiWidgets.map((widget, i) => {
-    const { formattedValue, deltaPct } = computeKpiValue({ type: "kpi", config: widget.config } as any, rows);
+    const { formattedValue, deltaPct } = computeKpiValue({ type: "kpi", title: widget.title, config: widget.config } as any, rows);
     const isUp = deltaPct > 0.5;
     const isDown = deltaPct < -0.5;
     const trendText = `${isUp ? "▲" : isDown ? "▼" : "–"} ${Math.abs(deltaPct).toFixed(1)}%`;
