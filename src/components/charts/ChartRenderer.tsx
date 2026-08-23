@@ -228,5 +228,5 @@ function EchartsPanel({ widget, rows, categoryOrder, onDrillDown, chartRef }: Ch
         />
       )}
     </div>
-  );
+  ); 
 }
