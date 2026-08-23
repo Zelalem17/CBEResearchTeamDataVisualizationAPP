@@ -132,7 +132,7 @@ export default function ReportPanel({ kpiWidgets, rows, categoryOrder, onRemove 
             </div>
           );
         })}
-      </div>
+      </div> 
     </div>
   );
 }
