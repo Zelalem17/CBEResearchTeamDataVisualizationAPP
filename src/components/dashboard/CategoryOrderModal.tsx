@@ -90,5 +90,5 @@ export default function CategoryOrderModal({ categories, onSave, onClose }: Cate
         </div>
       </div>
     </div>
-  );
+  ); 
 }
