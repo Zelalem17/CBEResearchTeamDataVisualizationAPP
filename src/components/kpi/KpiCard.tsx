@@ -29,32 +29,40 @@ function aggregate(rows: DataRow[], field: string, agg: string): number {
 }
 
 /** Detects a unit already declared in the metric's own name — e.g.
- * "Total Deposits in Millions" or "(In Millions Birr)" — so a value
- * that's already expressed in millions doesn't ALSO get a "M" suffix
- * computed from its raw magnitude on top of that. Stacking both would
- * silently read as 1,000,000× smaller than the real figure (e.g. a
- * deposits figure of 1,175,455.6 — already millions of Birr, i.e.
- * ~1.18 trillion Birr — naively abbreviating by raw size would show
- * "1.2M", which reads as 1.2 million of *something*, not 1.18 trillion
- * Birr): once the label says the unit, trust that instead of guessing
- * again from the number itself. */
-function detectDeclaredUnit(label: string): string | null {
+ * "Total Deposits in Millions" or "(In Millions Birr)" — and returns the
+ * multiplier to convert the stored (already-scaled) number into its
+ * true absolute value. A deposits figure stored as 1,175,455.6 under a
+ * "Millions" label is really ~1.18 trillion Birr, not literally
+ * "1,175,455.6 of something" — this is what lets that be recovered
+ * before choosing how to abbreviate it, rather than guessing an
+ * abbreviation from the stored number's raw size (which would read as a
+ * million times smaller than the real figure) or blindly slapping the
+ * declared unit's own letter on every value regardless of how big it
+ * actually is once converted (a summed total across many such values
+ * can easily cross into billions or trillions even though every
+ * individual value was "in millions"). */
+function declaredUnitMultiplier(label: string): number {
   const t = label.toLowerCase();
-  if (/\bbillion/.test(t)) return "B";
-  if (/\bmillion/.test(t)) return "M";
-  if (/\bthousand/.test(t)) return "K";
-  return null;
+  if (/\btrillion/.test(t)) return 1_000_000_000_000;
+  if (/\bbillion/.test(t)) return 1_000_000_000;
+  if (/\bmillion/.test(t)) return 1_000_000;
+  if (/\bthousand/.test(t)) return 1_000;
+  return 1;
 }
 
+/** Converts a number to its true absolute value (applying the label's
+ * declared unit, if any) and picks K/M/B/T — or no suffix at all for a
+ * small number — based on *that* true value's own magnitude. Never
+ * fixes on one letter regardless of size: a metric declared "in
+ * millions" might still correctly show as K, M, B, or T depending on
+ * what the specific value actually comes out to once converted. */
 export function formatNumber(n: number, unitLabel?: string): string {
-  const declaredUnit = unitLabel ? detectDeclaredUnit(unitLabel) : null;
-  if (declaredUnit) {
-    return `${n.toLocaleString(undefined, { maximumFractionDigits: 1 })}${declaredUnit}`;
-  }
-  if (Math.abs(n) >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(1)}B`;
-  if (Math.abs(n) >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (Math.abs(n) >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
-  return n.toLocaleString(undefined, { maximumFractionDigits: 2 });
+  const trueValue = n * (unitLabel ? declaredUnitMultiplier(unitLabel) : 1);
+  if (Math.abs(trueValue) >= 1_000_000_000_000) return `${(trueValue / 1_000_000_000_000).toFixed(1)}T`;
+  if (Math.abs(trueValue) >= 1_000_000_000) return `${(trueValue / 1_000_000_000).toFixed(1)}B`;
+  if (Math.abs(trueValue) >= 1_000_000) return `${(trueValue / 1_000_000).toFixed(1)}M`;
+  if (Math.abs(trueValue) >= 1_000) return `${(trueValue / 1_000).toFixed(1)}K`;
+  return trueValue.toLocaleString(undefined, { maximumFractionDigits: 2 });
 }
 
 /** Scales the headline number's font size down as its formatted text
@@ -73,7 +81,10 @@ function valueFontSizeClass(formatted: string): string {
  * this component on screen, and reused as-is by the Word export
  * (exportUtils.ts) so the exported report's KPI section always matches
  * exactly what's on screen instead of drifting out of sync with a
- * second, hand-copied implementation. */
+ * second, hand-copied implementation. `value` is the true absolute
+ * number (declared-unit multiplier already applied), matching
+ * `formattedValue` — so hovering a "4.4T" figure shows the real
+ * ~4,413,460,000,000, not the raw stored 4,413,460. */
 export function computeKpiValue(widget: Widget, rows: DataRow[]): { value: number; deltaPct: number; formattedValue: string } {
   const { field, agg = "sum", filters } = widget.config;
   const scoped = applyConfigFilters(rows, filters);
@@ -83,7 +94,8 @@ export function computeKpiValue(widget: Widget, rows: DataRow[]): { value: numbe
   const first = aggregate(scoped.slice(0, mid), field, agg);
   const second = aggregate(scoped.slice(mid), field, agg);
   const delta = first === 0 ? 0 : ((second - first) / Math.abs(first)) * 100;
-  return { value: total, deltaPct: delta, formattedValue: formatNumber(total, widget.title) };
+  const trueValue = total * declaredUnitMultiplier(widget.title ?? "");
+  return { value: trueValue, deltaPct: delta, formattedValue: formatNumber(total, widget.title) };
 }
 
 export default function KpiCard({ widget, rows }: KpiCardProps) {
@@ -106,4 +118,4 @@ export default function KpiCard({ widget, rows }: KpiCardProps) {
       </div>
     </div>
   );
-} 
+}
