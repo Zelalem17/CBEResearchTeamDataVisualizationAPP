@@ -3,10 +3,18 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- CBE logo as the browser tab icon. %BASE_URL% is replaced by Vite at
+         build time with the configured `base` (vite.config.ts) — using it
+         here (rather than a hardcoded "/favicon.svg") is what keeps this
+         resolving correctly under a relative/subdirectory deploy like
+         GitHub Pages, instead of only working when the site is served from
+         a domain's root. -->
+    <link rel="icon" type="image/svg+xml" href="%BASE_URL%favicon.svg" />
+    <link rel="apple-touch-icon" href="%BASE_URL%favicon.svg" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-    <title>CBE Research Team BI Insights</title>
+    <title>BI Insights — Instant Data Dashboards</title>
   </head>
   <body class="bg-gray-50 dark:bg-gray-950">
     <div id="root"></div>
