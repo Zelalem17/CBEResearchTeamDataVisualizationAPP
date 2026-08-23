@@ -28,6 +28,7 @@ export default function DatasetSection({ datasetId, showHeader, editable = true 
   const setActiveDataset = useDashboardStore((s) => s.setActiveDataset);
   const setViewMode = useDashboardStore((s) => s.setViewMode);
   const setPanelChartKind = useDashboardStore((s) => s.setPanelChartKind);
+  const setCategoryOrder = useDashboardStore((s) => s.setCategoryOrder);
   const [searchTerm, setSearchTerm] = useState("");
 
   const isPanel = useMemo(() => (tab ? isPanelSchema(tab.rows) : false), [tab]);
@@ -85,6 +86,8 @@ export default function DatasetSection({ datasetId, showHeader, editable = true 
         datasetName={tab.dataset.name}
         onWidgetsChange={(w) => updateWidgets(datasetId, w)}
         onDrillDown={handleDrillDown}
+        categoryOrder={tab.categoryOrder}
+        onCategoryOrderChange={editable ? (order) => setCategoryOrder(datasetId, order) : undefined}
         editable={editable}
       />
     </section>
