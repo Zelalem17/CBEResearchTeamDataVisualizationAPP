@@ -1,12 +1,17 @@
 import { useMemo } from "react";
 import { FileBarChart, TrendingUp, TrendingDown, Minus, X } from "lucide-react";
 import { computeKpiValue } from "@/components/kpi/KpiCard";
-import { assignSeriesColors, CBE_BRAND_PURPLE } from "@/components/charts/chartConfigBuilders";
+import { assignSeriesColors, isCbeLabel, CBE_BRAND_PURPLE } from "@/components/charts/chartConfigBuilders";
 import type { DataRow, Widget } from "@/types";
 
 interface ReportPanelProps {
   kpiWidgets: Widget[];
   rows: DataRow[];
+  /** Researcher's saved category display order (see
+   * CategoryOrderModal/DashboardGrid) — sorts the metric rows the same
+   * way it sorts every chart's bars/legend, so the Report panel and the
+   * charts below it never disagree about which entity comes first. */
+  categoryOrder?: string[];
   /** Omit to hide the per-metric remove control (viewer-role sessions). */
   onRemove?: (id: string) => void;
 }
@@ -38,13 +43,30 @@ function kpiCategoryLabel(widget: Widget): string | null {
  * react-grid-layout grid, not a widget inside it, so it's never
  * draggable and always the first thing on the page; the chart grid
  * starts on its own line right below it. */
-export default function ReportPanel({ kpiWidgets, rows, onRemove }: ReportPanelProps) {
-  const colorByCategory = useMemo(() => {
-    const labels = kpiWidgets.map(kpiCategoryLabel).filter((l): l is string => l !== null);
-    return assignSeriesColors(labels);
-  }, [kpiWidgets]);
+export default function ReportPanel({ kpiWidgets, rows, categoryOrder, onRemove }: ReportPanelProps) {
+  const orderedKpiWidgets = useMemo(() => {
+    return [...kpiWidgets].sort((a, b) => {
+      const catA = kpiCategoryLabel(a);
+      const catB = kpiCategoryLabel(b);
+      if (catA === null || catB === null) return 0;
+      if (categoryOrder && categoryOrder.length) {
+        const ai = categoryOrder.findIndex((n) => n.toLowerCase() === catA.toLowerCase());
+        const bi = categoryOrder.findIndex((n) => n.toLowerCase() === catB.toLowerCase());
+        return (ai === -1 ? categoryOrder.length : ai) - (bi === -1 ? categoryOrder.length : bi);
+      }
+      const aCbe = isCbeLabel(catA);
+      const bCbe = isCbeLabel(catB);
+      if (aCbe !== bCbe) return aCbe ? -1 : 1;
+      return 0;
+    });
+  }, [kpiWidgets, categoryOrder]);
 
-  if (!kpiWidgets.length) return null;
+  const colorByCategory = useMemo(() => {
+    const labels = orderedKpiWidgets.map(kpiCategoryLabel).filter((l): l is string => l !== null);
+    return assignSeriesColors(labels);
+  }, [orderedKpiWidgets]);
+
+  if (!orderedKpiWidgets.length) return null;
 
   return (
     <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-card overflow-hidden">
@@ -55,7 +77,7 @@ export default function ReportPanel({ kpiWidgets, rows, onRemove }: ReportPanelP
       <div className="h-0.5 bg-gold-500" />
 
       <div className="p-3 sm:p-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {kpiWidgets.map((widget) => {
+        {orderedKpiWidgets.map((widget) => {
           const { value, formattedValue, deltaPct } = computeKpiValue(widget, rows);
           const isUp = deltaPct > 0.5;
           const isDown = deltaPct < -0.5;
