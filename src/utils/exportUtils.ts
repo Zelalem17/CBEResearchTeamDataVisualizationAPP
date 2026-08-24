@@ -417,5 +417,5 @@ export function downloadFromUrl(url: string, token: string | null) {
       link.download = url.split("/").pop() || "export";
       link.click();
       URL.revokeObjectURL(link.href);
-    });
+    }); 
 }
