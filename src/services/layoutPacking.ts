@@ -37,20 +37,27 @@ function rankOf(type: string): number {
   return TYPE_RANK[type] ?? 60;
 }
 
-/** Sorts by type (see TYPE_RANK) and shelf-packs into the 12-column
- * grid: walks the sorted list left to right, placing each widget right
- * after the previous one if it fits in the remaining row width, and
- * wrapping to a new row (below the tallest widget already in the
- * current row) otherwise. Returns new widget objects with updated
- * `position`; everything else about each widget is untouched. */
-export function packWidgets<T extends Widget | Omit<Widget, "id">>(widgets: T[], rows: DataRow[] = []): T[] {
-  const sorted = [...widgets].sort((a, b) => rankOf(a.type) - rankOf(b.type));
-
+/** Shelf-packs widgets into the 12-column grid **in whatever order
+ * they're already in** — no sorting. Walks the list left to right,
+ * placing each widget right after the previous one if it fits in the
+ * remaining row width, and wrapping to a new row (below the tallest
+ * widget already in the current row) otherwise. Returns new widget
+ * objects with updated `position`; everything else about each widget,
+ * including its position in the array, is untouched.
+ *
+ * This is the piece that's safe to re-run after every add/remove/manual
+ * reorder: it only ever adjusts x/y (and the size floor from
+ * computeAutoFitSize) to close gaps and keep charts sitting two-per-row
+ * where they fit, and never re-sorts — so a researcher's own chosen
+ * order (via drag, or "move to position") survives editing the board,
+ * instead of silently reverting to type-sorted order on the very next
+ * add or remove. */
+export function shelfPack<T extends Widget | Omit<Widget, "id">>(widgets: T[], rows: DataRow[] = []): T[] {
   let x = 0;
   let y = 0;
   let rowHeight = 0;
 
-  return sorted.map((w) => {
+  return widgets.map((w) => {
     const fit = computeAutoFitSize(w as Widget, rows);
     const width = Math.min(GRID_COLS, Math.max(w.position.w, fit?.w ?? w.position.w));
     const height = Math.max(w.position.h, fit?.h ?? w.position.h);
@@ -65,50 +72,15 @@ export function packWidgets<T extends Widget | Omit<Widget, "id">>(widgets: T[],
     x += width;
     rowHeight = Math.max(rowHeight, height);
     return placed;
-    
-  });
-  export function shelfPack<T extends Widget | Omit<Widget, "id">>(
-  widgets: T[],
-  rows: DataRow[] = []
-): T[] {
-  let x = 0;
-  let y = 0;
-  let rowHeight = 0;
-
-  return widgets.map((w) => {
-    const fit = computeAutoFitSize(w as Widget, rows);
-
-    const width = Math.min(
-      GRID_COLS,
-      Math.max(w.position.w, fit?.w ?? w.position.w)
-    );
-
-    const height = Math.max(
-      w.position.h,
-      fit?.h ?? w.position.h
-    );
-
-    // Move to the next row when the widget doesn't fit.
-    if (x > 0 && x + width > GRID_COLS) {
-      x = 0;
-      y += rowHeight;
-      rowHeight = 0;
-    }
-
-    const placed = {
-      ...w,
-      position: {
-        x,
-        y,
-        w: width,
-        h: height,
-      },
-    };
-
-    x += width;
-    rowHeight = Math.max(rowHeight, height);
-
-    return placed;
   });
 }
+
+/** Sorts by type (see TYPE_RANK), then shelf-packs — the full
+ * "Auto-arrange" behavior. Only ever called from an explicit user
+ * action (the Auto-arrange button, or generating a fresh dashboard) —
+ * routine editing (add/remove/reorder) uses shelfPack alone so it never
+ * discards a researcher's own manual ordering as a side effect. */
+export function packWidgets<T extends Widget | Omit<Widget, "id">>(widgets: T[], rows: DataRow[] = []): T[] {
+  const sorted = [...widgets].sort((a, b) => rankOf(a.type) - rankOf(b.type));
+  return shelfPack(sorted, rows);
 }
