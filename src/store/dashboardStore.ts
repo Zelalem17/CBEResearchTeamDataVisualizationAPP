@@ -3,7 +3,7 @@ import { persist, createJSONStorage } from "zustand/middleware";
 import type { Dataset, Widget, FilterRule, DataRow } from "@/types";
 import { retypeComparisonWidgets, type PanelChartKind } from "@/services/comparisonDashboard";
 
-interface DatasetTab {
+export interface DatasetTab {
   dataset: Dataset;
   widgets: Widget[];
   rows: DataRow[];
@@ -147,6 +147,6 @@ export const useDashboardStore = create<DashboardState>()(
           Object.entries(state.tabs).map(([id, tab]) => [id, { ...tab, rows: tab.rows.slice(0, 2000) }])
         ),
       }) as unknown as DashboardState,
-    } 
+    }
   )
 );
