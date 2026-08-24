@@ -87,7 +87,7 @@ async function captureCanvas(node: HTMLElement): Promise<HTMLCanvasElement> {
     // only (the real on-screen card is untouched). Deliberately only the
     // root node — inner colored design (the Report panel's gradient
     // header, gold accent bars, chart colors) is left exactly as-is.
-    onclone: (clonedDoc: Document) => {
+    onclone: (clonedDoc: globalThis.Document) => {
       const captureId = node.getAttribute("data-widget-capture");
       const clonedNode = captureId
         ? (clonedDoc.querySelector(`[data-widget-capture="${CSS.escape(captureId)}"]`) as HTMLElement | null)
@@ -417,5 +417,5 @@ export function downloadFromUrl(url: string, token: string | null) {
       link.download = url.split("/").pop() || "export";
       link.click();
       URL.revokeObjectURL(link.href);
-    }); 
+    });
 }
