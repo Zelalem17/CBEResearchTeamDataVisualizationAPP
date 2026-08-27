@@ -48,8 +48,8 @@ export function isCbeLabel(label: string): boolean {
 const BANK_BRAND_COLORS: [pattern: RegExp, color: string][] = [
   [/awash/i, "#F26522"],       // Awash Bank — orange
   [/abyssinia/i, "#FFC72C"],   // Bank of Abyssinia — yellow/gold
-  [/dashen/i, "#C8102E"],      // Dashen Bank — red
-  [/wegagen/i, "#0057A6"],     // Wegagen Bank — blue
+  [/dashen/i, "#005BAA"],      // Dashen Bank — blue
+  [/wegagen/i, "#7B241C"],     // Wegagen Bank — maroon/brick red
   [/hibret|\bunited bank\b/i, "#00A19A"], // Hibret (formerly United) Bank — teal
   [/cooperative bank of oromia|\bcoop\b/i, "#2E7D32"], // Cooperative Bank of Oromia — green
   [/\boromia\b/i, "#F9A825"],  // Oromia International Bank (or plain "Oromia") — amber/gold
@@ -225,24 +225,81 @@ function lightenHex(hex: string, amount: number): string {
   return `#${[r, g, b].map((v) => v.toString(16).padStart(2, "0")).join("")}`;
 }
 
+/** Same color, as an rgba() string at the given opacity — used for
+ * shadow colors derived from a bar's own fill, so its glow always
+ * matches its own hue instead of one fixed generic gray shadow for
+ * every bar regardless of color. */
+function hexToRgba(hex: string, alpha: number): string {
+  const full = hex.replace("#", "");
+  const norm = full.length === 3 ? full.split("").map((c) => c + c).join("") : full;
+  const num = parseInt(norm, 16);
+  const r = (num >> 16) & 0xff, g = (num >> 8) & 0xff, b = num & 0xff;
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
 /** A single bar/segment's fill per config.barStyle — the selectable
  * "different design" for bar charts, cycled via the widget card's style
- * toggle: "rounded" (default, rounded top corners), "flat" (square
- * corners), or "gradient" (a soft top-to-bottom fade of the same
- * color). */
+ * toggle. Every tier now carries a soft shadow tinted from the bar's own
+ * color (rather than a flat generic gray) and rounded corners, so a bar
+ * chart reads as a deliberately designed graphic rather than a plain
+ * default chart library output, in both its normal and hovered state:
+ *  - "flat": solid color, gently rounded corners, a light shadow — the
+ *    calmest option, for when the gradient feels like too much.
+ *  - "rounded" (default): a vivid-to-soft vertical gradient with
+ *    generously rounded top corners and a matching-color glow beneath
+ *    it — this is the new default look every bar/grouped-bar chart
+ *    renders with unless a different style is chosen.
+ *  - "gradient": a bolder diagonal two-tone gradient with a stronger
+ *    glow, for the most dramatic look. */
 function barVisualStyle(baseColor: string, style: string | undefined) {
-  const radius = style === "flat" ? [0, 0, 0, 0] : [4, 4, 0, 0];
-  if (style === "gradient") {
+  if (style === "flat") {
     return {
-      borderRadius: radius,
-      color: {
-        type: "linear", x: 0, y: 0, x2: 0, y2: 1,
-        colorStops: [{ offset: 0, color: baseColor }, { offset: 1, color: lightenHex(baseColor, 0.55) }],
-      },
+      borderRadius: [4, 4, 2, 2],
+      color: baseColor,
+      shadowBlur: 6, shadowColor: hexToRgba(baseColor, 0.22), shadowOffsetY: 2,
     };
   }
-  return { borderRadius: radius, color: baseColor };
+  if (style === "gradient") {
+    return {
+      borderRadius: [11, 11, 3, 3],
+      color: {
+        type: "linear", x: 0, y: 0, x2: 1, y2: 1,
+        colorStops: [{ offset: 0, color: lightenHex(baseColor, 0.2) }, { offset: 1, color: baseColor }],
+      },
+      shadowBlur: 16, shadowColor: hexToRgba(baseColor, 0.45), shadowOffsetY: 7,
+    };
+  }
+  // Default ("rounded" / undefined) — the new cool baseline.
+  return {
+    borderRadius: [9, 9, 2, 2],
+    color: {
+      type: "linear", x: 0, y: 0, x2: 0, y2: 1,
+      colorStops: [{ offset: 0, color: baseColor }, { offset: 1, color: lightenHex(baseColor, 0.4) }],
+    },
+    shadowBlur: 11, shadowColor: hexToRgba(baseColor, 0.35), shadowOffsetY: 5,
+  };
 }
+
+/** Brightens a bar further on hover — the shadow blooms outward a bit
+ * and the fill lightens slightly, giving the chart some life without
+ * needing any extra interaction beyond the mouse already being there. */
+function barHoverEmphasis(baseColor: string) {
+  return {
+    itemStyle: { shadowBlur: 20, shadowColor: hexToRgba(baseColor, 0.55), shadowOffsetY: 8 },
+    scale: true,
+  };
+}
+
+// Flatter, less boxed-in axis chrome for bar-family charts specifically:
+// a faint neutral axis line instead of a solid one, no tick marks, and
+// soft dashed gridlines. Deliberately a semi-transparent slate rather
+// than a hardcoded light- or dark-mode-only color, so it stays legible
+// in both themes without fighting ECharts' own dark-theme text colors
+// (which are left alone here on purpose).
+const coolAxisLine = { lineStyle: { color: "rgba(148,163,184,0.35)" } };
+const coolSplitLine = { lineStyle: { type: "dashed" as const, color: "rgba(148,163,184,0.22)" } };
+const coolLegend = { bottom: 0, textStyle: { fontSize: 11 }, icon: "circle" as const, itemWidth: 9, itemHeight: 9, itemGap: 18 };
+const coolAnimation = { animationEasing: "cubicOut" as const, animationDuration: 650, animationDelay: (idx: number) => idx * 40 };
 
 // Default fill for a single-series bar chart's non-CBE bars — CBE's own
 // accent gold, kept visually distinct from the brand purple reserved for
@@ -329,20 +386,29 @@ export function buildBarOption(rows: DataRow[], config: any) {
     color: PALETTE,
     tooltip: baseTooltip,
     grid: showLabels ? barGrid : baseGrid,
-    xAxis: { type: "category", data: data.map((d) => d.key), axisLabel: { rotate: data.length > 6 ? 30 : 0 } },
-    yAxis: { type: "value" },
+    xAxis: {
+      type: "category", data: data.map((d) => d.key),
+      axisLabel: { rotate: data.length > 6 ? 30 : 0 },
+      axisLine: coolAxisLine, axisTick: { show: false },
+    },
+    yAxis: { type: "value", axisLine: { show: false }, axisTick: { show: false }, splitLine: coolSplitLine },
     series: [{
       type: "bar",
-      data: data.map((d) => ({
-        value: d.value,
-        pct: (d.value / total) * 100,
-        itemStyle: barVisualStyle(isCbeLabel(d.key) ? CBE_BRAND_PURPLE : DEFAULT_BAR_ACCENT, barStyle),
-      })),
+      data: data.map((d) => {
+        const color = isCbeLabel(d.key) ? CBE_BRAND_PURPLE : DEFAULT_BAR_ACCENT;
+        return {
+          value: d.value,
+          pct: (d.value / total) * 100,
+          itemStyle: barVisualStyle(color, barStyle),
+          emphasis: barHoverEmphasis(color),
+        };
+      }),
       // Off by default — plain bar chart stays clean. Turned on via the
       // "%" toggle on the widget card, which prints the actual value and
       // its share of the total right on the bar.
       label: showLabels ? attractiveValueLabel(false) : { show: false },
       barMaxWidth: 42,
+      ...coolAnimation,
     }],
   };
 }
@@ -724,10 +790,14 @@ export function buildBarLineSeriesOption(rows: DataRow[], config: any) {
 
   return {
     tooltip: { ...baseTooltip, axisPointer: { type: "cross" } },
-    legend: { bottom: 0, textStyle: { fontSize: 11 } },
+    legend: coolLegend,
     grid: showLabels ? { ...barGrid, bottom: 56 } : { ...baseGrid, bottom: 56 },
-    xAxis: { type: "category", data: xValues, axisLabel: { rotate: xValues.length > 6 ? 30 : 0 } },
-    yAxis: { type: "value" },
+    xAxis: {
+      type: "category", data: xValues,
+      axisLabel: { rotate: xValues.length > 6 ? 30 : 0 },
+      axisLine: coolAxisLine, axisTick: { show: false },
+    },
+    yAxis: { type: "value", axisLine: { show: false }, axisTick: { show: false }, splitLine: coolSplitLine },
     series,
   };
 }
@@ -902,12 +972,14 @@ export function buildGroupedBarOption(rows: DataRow[], config: any) {
     return {
       name: sv, type: "bar", data,
       itemStyle: barVisualStyle(seriesColor, config.stacked ? "flat" : config.barStyle),
+      emphasis: barHoverEmphasis(seriesColor),
       // Off by default — turned on via the "%" toggle on the widget
       // card. When on: actual value + this series' share of that
       // x-group's total (e.g. CBE's number and its % of CBE+Industry
       // for that period), printed right on the bar.
       label: showLabels ? attractiveValueLabel(!!config.stacked) : { show: false },
       barMaxWidth: 28,
+      ...coolAnimation,
       ...(config.stacked ? { stack: "total" } : {}),
     };
   });
@@ -915,10 +987,14 @@ export function buildGroupedBarOption(rows: DataRow[], config: any) {
   return {
     color: PALETTE,
     tooltip: { ...baseTooltip, axisPointer: { type: "shadow" } },
-    legend: { bottom: 0, textStyle: { fontSize: 11 } },
+    legend: coolLegend,
     grid: config.showLabels ? { ...barGrid, bottom: 56 } : { ...baseGrid, bottom: 56 },
-    xAxis: { type: "category", data: xValues, axisLabel: { rotate: xValues.length > 6 ? 30 : 0 } },
-    yAxis: { type: "value" },
+    xAxis: {
+      type: "category", data: xValues,
+      axisLabel: { rotate: xValues.length > 6 ? 30 : 0 },
+      axisLine: coolAxisLine, axisTick: { show: false },
+    },
+    yAxis: { type: "value", axisLine: { show: false }, axisTick: { show: false }, splitLine: coolSplitLine },
     series,
   };
 }
@@ -1283,5 +1359,5 @@ export function buildOptionForWidget(widget: Widget, rows: DataRow[], categoryOr
     case "streamgraph": return buildStreamgraphOption(rows, widget.config);
     case "radar": return buildRadarOption(rows, widget.config);
     default: return {};
-  } 
+  }
 }
